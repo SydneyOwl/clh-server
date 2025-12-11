@@ -1,0 +1,18 @@
+syntax = "proto3";
+package msgproto.msg;
+option go_package = "github.com/sydneyowl/clh-server/msgproto";
+
+message HandshakeRequest{
+  string os = 1; // OS that is running CLH
+  string ver = 2; // Version of CLH
+  string client_type = 3; // Version of CLH
+  string auth_key = 4;
+  int64 timestamp = 5;
+  string run_id = 6;
+}
+
+message HandshakeResponse{
+  string run_id = 1;
+  bool accept = 2;
+  string error = 3;
+}
