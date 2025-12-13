@@ -20,5 +20,5 @@ type CLHCache interface {
 	// ReadAll reads all elements of runID out at once.
 	ReadAll(runID string) ([]msg.Message, error)
 	// ReadUntil continously read elements of runID until doneChan tells it to stop.
-	ReadUntil(runID string, callback func(message msg.Message), doneChan <-chan struct{}) error
+	ReadUntil(runID string, callback func(message msg.Message) error, doneChan <-chan struct{}) error
 }

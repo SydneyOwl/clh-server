@@ -71,8 +71,9 @@ func TestCache(t *testing.T) {
 			time.Sleep(1 * time.Second)
 		}
 	}()
-	err = tm.ReadUntil("TEST", func(message msg.Message) {
+	err = tm.ReadUntil("TEST", func(message msg.Message) error {
 		t.Logf("We got %s", message)
+		return nil
 	}, make(<-chan struct{}))
 	if err != nil {
 		t.Fatal(err)

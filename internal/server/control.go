@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/sydneyowl/clh-server/internal/cache"
 	"net"
 	"sync/atomic"
 	"time"
@@ -18,6 +19,7 @@ type Control struct {
 	ctx context.Context
 
 	serverCfg     *config.Config
+	cache         cache.CLHCache
 	lastPing      atomic.Value
 	doneCh        chan struct{}
 	runID         string
@@ -25,11 +27,12 @@ type Control struct {
 	msgDispatcher *msg.Dispatcher
 }
 
-func NewControl(cfg *config.Config, runID string, conn net.Conn, ctx context.Context) *Control {
+func NewControl(cfg *config.Config, runID string, cache cache.CLHCache, conn net.Conn, ctx context.Context) *Control {
 	ctrl := &Control{
 		ctx:       ctx,
 		runID:     runID,
 		conn:      conn,
+		cache:     cache,
 		serverCfg: cfg,
 		doneCh:    make(chan struct{}),
 	}
@@ -55,6 +58,8 @@ func (ctrl *Control) Replace(newCtl *Control) {
 
 func (ctrl *Control) WaitForQuit() {
 	<-ctrl.doneCh
+	_ = ctrl.cache.RemoveAll(ctrl.runID)
+	slog.Tracef("Release cache of %s", ctrl.runID)
 }
 
 func (ctrl *Control) Close() error {
@@ -102,7 +107,7 @@ func (ctrl *Control) heartbeatHandler(msg msg1.Message) {
 
 func (ctrl *Control) wsjtxMsgHandler(msg msg1.Message) {
 	slog.Tracef("Client %s sent a wsjtx message.", ctrl.runID)
-
+	_ = ctrl.cache.Add(ctrl.runID, msg)
 }
 
 func (ctrl *Control) heartbeatChecker() {

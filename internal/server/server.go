@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"github.com/sydneyowl/clh-server/internal/cache"
 	"net"
 	"strconv"
 	"time"
@@ -23,6 +24,7 @@ const (
 type Service struct {
 	cfg         *config.Config
 	ctrlManager *ControlManager
+	cache       cache.CLHCache
 	tlsEnabled  bool
 	tlsConfig   *tls.Config
 	ctx         context.Context
@@ -35,10 +37,10 @@ func NewService(cfg *config.Config) (*Service, error) {
 	svr := &Service{
 		cfg:         cfg,
 		ctrlManager: NewControlManager(),
+		cache:       cache.NewMemoryCache(),
+		tlsEnabled:  cfg.Server.Encrypt.EnableTLS,
+		verifier:    verifier.NewAuthKeyVerifier(cfg.Server.Encrypt.Key),
 	}
-
-	svr.tlsEnabled = cfg.Server.Encrypt.EnableTLS
-	svr.verifier = verifier.NewAuthKeyVerifier(svr.cfg.Server.Encrypt.Key)
 
 	if svr.tlsEnabled {
 		tlscfg, err := trans.NewServerTLSConfig(cfg.Server.Encrypt.TLSCertPath, cfg.Server.Encrypt.TLSKeyPath, cfg.Server.Encrypt.TLSCACertPath)
@@ -139,7 +141,7 @@ func (svr *Service) handleConn(conn net.Conn) {
 			Accept: true,
 			Error:  "",
 		})
-		ctl := NewControl(svr.cfg, m.RunId, conn, svr.ctx)
+		ctl := NewControl(svr.cfg, m.RunId, svr.cache, conn, svr.ctx)
 		// pop out dupe conn
 		if old := svr.ctrlManager.Add(m.RunId, ctl); old != nil {
 			old.WaitForQuit()
