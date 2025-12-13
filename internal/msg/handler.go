@@ -5,6 +5,7 @@ package msg
 import (
 	"io"
 
+	"github.com/gookit/slog"
 	"github.com/sydneyowl/clh-server/pkg/msg"
 	"google.golang.org/protobuf/proto"
 )
@@ -46,7 +47,10 @@ func (d *Dispatcher) sendLoop() {
 		case <-d.doneCh:
 			return
 		case m := <-d.sendCh:
-			_ = WriteMsg(d.rw, m)
+			err := WriteMsg(d.rw, m)
+			if err != nil {
+				slog.Errorf("error while sending message: %s. Ignored.", err)
+			}
 		}
 	}
 }

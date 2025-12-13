@@ -3,6 +3,7 @@ package test
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
@@ -17,6 +18,21 @@ var (
 )
 
 func TestC2C(t *testing.T) {
+	//go doit(t)
+	//go doit(t)
+	//go doit(t)
+	//go doit(t)
+	//go doit(t)
+	//go doit(t)
+	//go doit(t)
+	//go doit(t)
+	//go doit(t)
+	//go doit(t)
+	go doit(t)
+	select {}
+}
+
+func doit(t *testing.T) {
 	//conn, _ := net.Dial("tcp", addr)
 	conn, err := tls.Dial("tcp", addr, &tls.Config{InsecureSkipVerify: true})
 	if err != nil {
@@ -44,11 +60,22 @@ func TestC2C(t *testing.T) {
 	response := readMsg.(*msgproto.HandshakeResponse)
 	fmt.Println(response)
 	_ = conn.SetReadDeadline(time.Time{})
-	err = msg.WriteMsg(conn, &msgproto.DigModeUpdate{
-		RunId:      "CLH",
-		RawMessage: "CQ POTA BH7SSK OM42",
-	})
+	err = msg.WriteMsg(conn, &msgproto.WsjtxMessage{})
 	if err != nil {
 		t.Fatal(err)
+	}
+	go dohb(conn)
+	select {}
+}
+
+func dohb(conn net.Conn) {
+	for {
+		err := msg.WriteMsg(conn, &msgproto.Ping{
+			Timestamp: time.Now().Unix(),
+		})
+		if err != nil {
+			return
+		}
+		time.Sleep(time.Second * 1)
 	}
 }

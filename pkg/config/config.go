@@ -45,18 +45,18 @@ func (cfg Config) Verify() ([]string, []string) {
 	if cfg.Server.BindPort > 65535 || cfg.Server.BindPort < 1 {
 		errorMsg = append(errorMsg, "Invalid bind port number.")
 	}
-	if cfg.Message.Key == "" {
+	if cfg.Server.Encrypt.Key == "" {
 		errorMsg = append(errorMsg, "Key should not be empty.")
 	}
-	if len(cfg.Message.Key) < 10 {
+	if len(cfg.Server.Encrypt.Key) < 10 {
 		errorMsg = append(errorMsg, "Key must be at least 10 characters.")
 	}
 
-	if !cfg.Message.EnableTLS {
+	if !cfg.Server.Encrypt.EnableTLS {
 		warningMsg = append(warningMsg, "Disabling encryption is not suggested!")
 	}
 
-	if cfg.Message.TLSCertPath == "" || cfg.Message.TLSKeyPath == "" {
+	if cfg.Server.Encrypt.TLSCertPath == "" || cfg.Server.Encrypt.TLSKeyPath == "" {
 		warningMsg = append(warningMsg, "Missing cert or key for TLS. Will generate one automatically later.")
 	}
 

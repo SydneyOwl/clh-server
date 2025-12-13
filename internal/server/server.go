@@ -21,25 +21,27 @@ const (
 )
 
 type Service struct {
-	cfg        *config.Config
-	tlsEnabled bool
-	tlsConfig  *tls.Config
-	ctx        context.Context
-	cancel     context.CancelFunc
-	listener   net.Listener
-	verifier   verifier.Verifier
+	cfg         *config.Config
+	ctrlManager *ControlManager
+	tlsEnabled  bool
+	tlsConfig   *tls.Config
+	ctx         context.Context
+	cancel      context.CancelFunc
+	listener    net.Listener
+	verifier    verifier.Verifier
 }
 
 func NewService(cfg *config.Config) (*Service, error) {
 	svr := &Service{
-		cfg: cfg,
+		cfg:         cfg,
+		ctrlManager: NewControlManager(),
 	}
 
-	svr.tlsEnabled = cfg.Message.EnableTLS
-	svr.verifier = verifier.NewAuthKeyVerifier(svr.cfg.Message.Key)
+	svr.tlsEnabled = cfg.Server.Encrypt.EnableTLS
+	svr.verifier = verifier.NewAuthKeyVerifier(svr.cfg.Server.Encrypt.Key)
 
 	if svr.tlsEnabled {
-		tlscfg, err := trans.NewServerTLSConfig(cfg.Message.TLSCertPath, cfg.Message.TLSKeyPath, cfg.Message.TLSCACertPath)
+		tlscfg, err := trans.NewServerTLSConfig(cfg.Server.Encrypt.TLSCertPath, cfg.Server.Encrypt.TLSKeyPath, cfg.Server.Encrypt.TLSCACertPath)
 		if err != nil {
 			return nil, err
 		}
@@ -137,8 +139,18 @@ func (svr *Service) handleConn(conn net.Conn) {
 			Accept: true,
 			Error:  "",
 		})
-		ctl := NewControl(svr.ctx, m.RunId, conn)
-		ctl.Run()
+		ctl := NewControl(svr.cfg, m.RunId, conn, svr.ctx)
+		// pop out dupe conn
+		if old := svr.ctrlManager.Add(m.RunId, ctl); old != nil {
+			old.WaitForQuit()
+			slog.Infof(" [%s] replaced by new client.", old.runID)
+		}
+		go ctl.Run()
+		go func() {
+			ctl.WaitForQuit()
+			svr.ctrlManager.Del(m.RunId, ctl)
+			slog.Tracef("Released %s from ctrl manager.", m.RunId)
+		}()
 	default:
 		slog.Debugf("received a request that cannot be understood by pre-handler.")
 	}

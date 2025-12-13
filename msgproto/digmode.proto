@@ -2,7 +2,70 @@ syntax = "proto3";
 package msgproto.msg;
 option go_package = "github.com/sydneyowl/clh-server/msgproto";
 
-message DigModeUpdate{
-  string run_id = 1;
-  string raw_message = 2;
+message WsjtxMessage {
+  oneof payload {
+    Status status = 1;
+    Decode decode = 2;
+    WSPRDecode wspr_decode = 3;
+  }
+  int64 timestamp = 100;         
+}
+
+message Decode{
+  bool new = 1;
+  uint32 time = 2;
+  int32 snr = 3;
+  float offset_time_seconds = 4;
+  float offset_frequency_hz = 5;
+  string mode = 6;
+  string message = 7;
+  bool low_confidence = 8;
+  bool off_air = 9;
+}
+
+message WSPRDecode{
+  bool new = 1;
+  uint32 time = 2;
+  int32 snr = 3;
+  float delta_time_seconds = 4;
+  uint64 frequency_hz = 5;
+  int32 frequency_drift_hz = 6;
+  string callsign = 7;
+  string grid = 8;
+  uint32 power = 9;
+  bool off_air = 10;
+}
+
+message Status {
+  uint64 dial_frequency_hz = 1;
+  string mode = 2;
+  string dx_call = 3;
+  string report = 4;
+  string tx_mode = 5;
+  bool tx_enabled = 6;
+  bool transmitting = 7;
+  bool decoding = 8;
+  uint32 rx_offset_frequency_hz = 9;
+  uint32 tx_offset_frequency_hz = 10;
+  string de_call = 11;
+  string de_grid = 12;
+  string dx_grid = 13;
+  bool tx_watchdog = 14;
+  string sub_mode = 15;
+  bool fast_mode = 16;
+  SpecialOperationMode special_operation_mode = 17;
+  uint32 frequency_tolerance = 18;
+  uint32 tr_period = 19;
+  string configuration_name = 20;
+  string tx_message = 21;
+}
+
+enum SpecialOperationMode {
+  NONE = 0;
+  NAVHF = 1;
+  EUVHF = 3;
+  FIELDDAY = 4;
+  RTTYRU = 5;
+  FOX = 6;
+  HOUND = 7;
 }

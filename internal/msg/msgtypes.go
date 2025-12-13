@@ -7,8 +7,10 @@ import (
 
 func buildMsgMap() map[byte]func() msg.Message {
 	var msgMap = make(map[byte]func() msg.Message)
+	msgMap['1'] = func() msg.Message { return &msgproto.Ping{} }
+	msgMap['2'] = func() msg.Message { return &msgproto.Pong{} }
 	msgMap['a'] = func() msg.Message { return &msgproto.HandshakeRequest{} }
 	msgMap['b'] = func() msg.Message { return &msgproto.HandshakeResponse{} }
-	msgMap['c'] = func() msg.Message { return &msgproto.DigModeUpdate{} }
+	msgMap['c'] = func() msg.Message { return &msgproto.WsjtxMessage{} }
 	return msgMap
 }
