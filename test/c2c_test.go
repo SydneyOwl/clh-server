@@ -18,16 +18,16 @@ var (
 )
 
 func TestC2C(t *testing.T) {
-	//go doit(t)
-	//go doit(t)
-	//go doit(t)
-	//go doit(t)
-	//go doit(t)
-	//go doit(t)
-	//go doit(t)
-	//go doit(t)
-	//go doit(t)
-	//go doit(t)
+	go doit(t)
+	go doit(t)
+	go doit(t)
+	go doit(t)
+	go doit(t)
+	go doit(t)
+	go doit(t)
+	go doit(t)
+	go doit(t)
+	go doit(t)
 	go doit(t)
 	select {}
 }
@@ -44,7 +44,7 @@ func doit(t *testing.T) {
 	err = msg.WriteMsg(conn, &msgproto.HandshakeRequest{
 		Os:         "Windows",
 		Ver:        "0.2.3",
-		ClientType: "Provider",
+		ClientType: "sender",
 		AuthKey:    aa,
 		Timestamp:  curr,
 		RunId:      "CLH",
@@ -74,6 +74,7 @@ func dohb(conn net.Conn) {
 			Timestamp: time.Now().Unix(),
 		})
 		if err != nil {
+			fmt.Println(err)
 			return
 		}
 		time.Sleep(time.Second * 1)

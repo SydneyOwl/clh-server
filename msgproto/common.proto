@@ -1,0 +1,8 @@
+syntax = "proto3";
+package msgproto.msg;
+option go_package = "github.com/sydneyowl/clh-server/msgproto";
+
+message CommonResponse{
+  bool success = 1;
+  string message = 2;
+}

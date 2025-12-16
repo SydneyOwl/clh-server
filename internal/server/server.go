@@ -3,10 +3,11 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"github.com/sydneyowl/clh-server/internal/cache"
 	"net"
 	"strconv"
 	"time"
+
+	"github.com/sydneyowl/clh-server/internal/cache"
 
 	"github.com/gookit/slog"
 	"github.com/sydneyowl/clh-server/internal/msg"
@@ -69,7 +70,7 @@ func (svr *Service) Run(ctx context.Context) {
 		ln, err = net.Listen("tcp", address)
 	}
 	if err != nil {
-		slog.Panicf("failed to listen on %s: %w", address, err)
+		slog.Panicf("failed to listen on %s: %s", address, err)
 	}
 	svr.listener = ln
 
@@ -134,6 +135,18 @@ func (svr *Service) handleConn(conn net.Conn) {
 			_ = conn.Close()
 			return
 		}
+
+		clientType, err := ValidateClientType(m.ClientType)
+		if err != nil {
+			slog.Warnf("failed to validate client type: %v", err)
+			_ = msg.WriteMsg(conn, &msgproto.HandshakeResponse{
+				RunId:  m.RunId,
+				Accept: false,
+				Error:  err.Error(),
+			})
+			_ = conn.Close()
+		}
+
 		// accept connection
 		slog.Infof("client login: ip [%s] os [%s] type [%s]", conn.RemoteAddr().String(), m.Os, m.ClientType)
 		_ = msg.WriteMsg(conn, &msgproto.HandshakeResponse{
@@ -141,7 +154,7 @@ func (svr *Service) handleConn(conn net.Conn) {
 			Accept: true,
 			Error:  "",
 		})
-		ctl := NewControl(svr.cfg, m.RunId, svr.cache, conn, svr.ctx)
+		ctl := NewControl(svr.cfg, m.RunId, clientType, svr.cache, conn, svr.ctx)
 		// pop out dupe conn
 		if old := svr.ctrlManager.Add(m.RunId, ctl); old != nil {
 			old.WaitForQuit()

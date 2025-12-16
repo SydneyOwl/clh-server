@@ -4,6 +4,8 @@ go 1.25.4
 
 require (
 	github.com/gookit/slog v0.6.0
+	github.com/olebedev/emitter v0.0.0-20230411050614-349169dec2ba
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	go.yaml.in/yaml/v3 v3.0.4

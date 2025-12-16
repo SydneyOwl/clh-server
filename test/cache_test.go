@@ -1,82 +1,63 @@
 package test
 
 import (
-	"crypto/rand"
-	"github.com/sydneyowl/clh-server/internal/cache"
-	"github.com/sydneyowl/clh-server/msgproto"
-	"github.com/sydneyowl/clh-server/pkg/msg"
-	"strconv"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	cached1 "github.com/sydneyowl/clh-server/internal/cache"
+	"github.com/sydneyowl/clh-server/msgproto"
+	"github.com/sydneyowl/clh-server/pkg/msg"
 )
 
-func TestCache(t *testing.T) {
-	tm := cache.NewMemoryCache()
+// mock message
+var testMsg1 = &msgproto.WsjtxMessage{}
+var testMsg2 = &msgproto.WsjtxMessage{}
+var testMsg3 = &msgproto.WsjtxMessage{}
+var testMsg4 = &msgproto.WsjtxMessage{}
 
-	for i := range 10 {
-		err := tm.Add("TEST", &msgproto.WsjtxMessage{
-			Payload: &msgproto.WsjtxMessage_Decode{
-				Decode: &msgproto.Decode{
-					New:               false,
-					Time:              0,
-					Snr:               0,
-					OffsetTimeSeconds: 0,
-					OffsetFrequencyHz: 0,
-					Mode:              "FT8",
-					Message:           "InfoTest" + strconv.Itoa(i),
-					LowConfidence:     false,
-					OffAir:            false,
-				},
-			},
-			Timestamp: time.Now().Unix(),
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
+func TestMemoryCache_PublishAndSubscribe(t *testing.T) {
+	cache := cached1.NewMemoryCache()
+	runId := "test-run-1"
+
+	err := cache.PublishMessage(runId, testMsg1)
+	assert.NoError(t, err)
+	err = cache.PublishMessage(runId, testMsg2)
+	assert.NoError(t, err)
+
+	// 3. 注册 subscriber
+	var received []msg.Message
+	var mu sync.Mutex
+	handler := func(m msg.Message) {
+		mu.Lock()
+		received = append(received, m)
+		mu.Unlock()
 	}
 
-	all, err := tm.ReadAll("TEST")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ch := cache.SubscribeHandler(runId, handler)
 
-	for _, v := range all {
-		t.Logf("cache content: %s", v)
-	}
+	// 4. 等待 emitter 处理（因为是同步调用，无需 wait）
+	time.Sleep(10 * time.Millisecond)
 
-	all, err = tm.ReadAll("TEST")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("%s", strconv.Itoa(len(all)))
+	// 5. 验证历史消息已回放
+	mu.Lock()
+	assert.Equal(t, []msg.Message{testMsg1, testMsg2}, received)
+	mu.Unlock()
 
-	go func() {
-		for range 100 {
-			tm.Add("TEST", &msgproto.WsjtxMessage{
-				Payload: &msgproto.WsjtxMessage_Decode{
-					Decode: &msgproto.Decode{
-						New:               false,
-						Time:              0,
-						Snr:               0,
-						OffsetTimeSeconds: 0,
-						OffsetFrequencyHz: 0,
-						Mode:              "FT8",
-						Message:           "InfoTestFF" + rand.Text(),
-						LowConfidence:     false,
-						OffAir:            false,
-					},
-				},
-				Timestamp: time.Now().Unix(),
-			})
-			time.Sleep(1 * time.Second)
-		}
-	}()
-	err = tm.ReadUntil("TEST", func(message msg.Message) error {
-		t.Logf("We got %s", message)
-		return nil
-	}, make(<-chan struct{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	select {}
+	// 7. 发新消息，应直接投递
+	err = cache.PublishMessage(runId, testMsg3)
+	assert.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+	mu.Lock()
+	assert.Equal(t, []msg.Message{testMsg1, testMsg2, testMsg3}, received)
+	mu.Unlock()
+
+	// 8. 取消订阅
+	cache.UnsubscribeHandler(runId, ch)
+
+	// 9. 再发消息 → 应重新缓存（因为无 listener）
+	err = cache.PublishMessage(runId, testMsg4)
+	assert.NoError(t, err)
 }

@@ -1,0 +1,12 @@
+syntax = "proto3";
+package msgproto.msg;
+option go_package = "github.com/sydneyowl/clh-server/msgproto";
+
+message Command{
+  string command = 1;
+  repeated string params = 2;
+}
+
+message Subscribe{
+  string target_run_id = 1;
+}

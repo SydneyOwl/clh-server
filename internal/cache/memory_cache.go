@@ -6,183 +6,136 @@ import (
 	"time"
 
 	"github.com/gookit/slog"
-	"github.com/sydneyowl/clh-server/msgproto"
+	"github.com/olebedev/emitter"
+	"github.com/patrickmn/go-cache"
 	"github.com/sydneyowl/clh-server/pkg/msg"
 )
 
 const (
-	StorageTimeoutSec   = 86400
-	CheckPollTimeoutSec = 60
-	ChannelBufferSize   = 100
+	ChannelBufferSize    = 100
+	BufferSliceCap       = 50
+	UnsendExpireDuration = time.Minute * 30
+	UnsendCleanDuration  = time.Minute * 35
+	UnsendSizeLimit      = 200
+	EmitTopicPrefix      = "clhmsg"
 )
 
+type TopicBuffer struct {
+	mu   sync.Mutex
+	msgs []msg.Message
+}
+
 type MemoryCache struct {
-	persistent map[string]chan msg.Message
-	updateAt   map[string]time.Time
-	mu         sync.RWMutex
+	unsendCache *cache.Cache
+	msgEmitter  *emitter.Emitter
+
+	// mu locks unsendCache
+	mu sync.Mutex
+}
+
+func (c *MemoryCache) RemoveCache(runId string) {
+	topic := fmt.Sprintf("%s:%s", EmitTopicPrefix, runId)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.msgEmitter.Off(topic)
+	c.unsendCache.Delete(topic)
+}
+
+func (c *MemoryCache) PublishMessage(runId string, message msg.Message) error {
+	return c.publishMessage(runId, message)
+}
+
+func (c *MemoryCache) SubscribeHandler(runId string, handler func(message msg.Message)) (token any) {
+	wrapIt := c.eventHandlerWrapper(handler)
+	return c.subscribeHandler(runId, wrapIt)
+}
+
+func (c *MemoryCache) UnsubscribeHandler(runId string, token any) {
+	c.unsubscribeHandler(runId, token.(<-chan emitter.Event))
 }
 
 func NewMemoryCache() *MemoryCache {
-	mc := &MemoryCache{
-		persistent: make(map[string]chan msg.Message),
-		updateAt:   make(map[string]time.Time),
-	}
-	go mc.timeoutScanner()
-	return mc
-}
-
-func (m *MemoryCache) timeoutScanner() {
-	ticker := time.NewTicker(CheckPollTimeoutSec * time.Second)
-	defer ticker.Stop()
-
-	for {
-		<-ticker.C
-		m.cleanupExpired()
+	return &MemoryCache{
+		unsendCache: cache.New(UnsendExpireDuration, UnsendCleanDuration),
+		msgEmitter:  emitter.New(ChannelBufferSize),
 	}
 }
 
-func (m *MemoryCache) cleanupExpired() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
+	topic := fmt.Sprintf("%s:%s", EmitTopicPrefix, runId)
 
-	now := time.Now()
-	expiredRuns := make([]string, 0)
-
-	for runID := range m.persistent {
-		lastUpdate, exists := m.updateAt[runID]
-		if !exists {
-			continue
-		}
-
-		if now.Sub(lastUpdate) > StorageTimeoutSec*time.Second {
-			expiredRuns = append(expiredRuns, runID)
-		}
-	}
-
-	for _, runID := range expiredRuns {
-		delete(m.persistent, runID)
-		delete(m.updateAt, runID)
-		slog.Debugf("Cleaned up expired cache for run: %s", runID)
-	}
-}
-
-func (m *MemoryCache) ensureAdd(runID string, message msg.Message) error {
-	m.mu.Lock()
-
-	ch, exists := m.persistent[runID]
-	if !exists {
-		ch = make(chan msg.Message, ChannelBufferSize)
-		m.persistent[runID] = ch
-	}
-
-	m.updateAt[runID] = time.Now()
-	m.mu.Unlock()
-
-	// 尝试发送消息
-	select {
-	case ch <- message:
+	if len(c.msgEmitter.Listeners(topic)) != 0 {
+		_ = c.msgEmitter.Emit(topic, message)
 		return nil
-	default:
-		select {
-		case <-ch:
-			slog.Tracef("Channel full for %s, dropping oldest message", runID)
-		default:
-		}
-
-		select {
-		case ch <- message:
-			return nil
-		default:
-			slog.Warnf("Channel for run %s is congested, message dropped", runID)
-			return fmt.Errorf("channel for run %s is congested", runID)
-		}
 	}
-}
 
-func (m *MemoryCache) getChannel(runID string) (chan msg.Message, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	ch, exists := m.persistent[runID]
-	return ch, exists
-}
-
-func (m *MemoryCache) Add(runID string, value msg.Message) error {
-	switch x := value.(type) {
-	case *msgproto.WsjtxMessage:
-		switch v := x.Payload.(type) {
-		case *msgproto.WsjtxMessage_Status:
-			return m.ensureAdd(runID, v.Status)
-		case *msgproto.WsjtxMessage_Decode:
-			return m.ensureAdd(runID, v.Decode)
-		case *msgproto.WsjtxMessage_WsprDecode:
-			return m.ensureAdd(runID, v.WsprDecode)
-		default:
-			return fmt.Errorf("unsupported message type: %T", v)
+	// there's no handler that subscribes this topic - we just cache it for future usage.
+	cc, found := c.unsendCache.Get(topic)
+	if !found {
+		t := &TopicBuffer{
+			mu:   sync.Mutex{},
+			msgs: make([]msg.Message, 0, BufferSliceCap),
 		}
-	default:
-		return fmt.Errorf("unsupported message type: %T", value)
+		t.mu.Lock()
+		t.msgs = append(t.msgs, message)
+		t.mu.Unlock()
+		c.unsendCache.Set(topic, t, cache.DefaultExpiration)
+	} else {
+		mm, ok := cc.(*TopicBuffer)
+		if !ok {
+			return fmt.Errorf("unexpected type %T", cc)
+		}
+		// todo this is not elegant ..
+		mm.mu.Lock()
+		if len(mm.msgs) >= UnsendSizeLimit {
+			mm.msgs = mm.msgs[1:]
+		}
+		mm.msgs = append(mm.msgs, message)
+		mm.mu.Unlock()
+		c.unsendCache.Set(topic, mm, cache.DefaultExpiration)
 	}
-}
-
-func (m *MemoryCache) RemoveAll(runID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if ch, exists := m.persistent[runID]; exists {
-		close(ch)
-	}
-	delete(m.persistent, runID)
-	delete(m.updateAt, runID)
-
 	return nil
 }
 
-func (m *MemoryCache) ReadAll(runID string) ([]msg.Message, error) {
-	ch, exists := m.getChannel(runID)
-	if !exists {
-		return nil, fmt.Errorf("%s is not cached", runID)
+func (c *MemoryCache) subscribeHandler(runId string, handler func(event *emitter.Event)) <-chan emitter.Event {
+	topic := fmt.Sprintf("%s:%s", EmitTopicPrefix, runId)
+	ch := c.msgEmitter.On(topic, handler)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// if we're the first subscriber... send all buffered messages!
+	if cc, found := c.unsendCache.Get(topic); found {
+		buf := cc.(*TopicBuffer)
+		buf.mu.Lock()
+		history := make([]any, len(buf.msgs), BufferSliceCap)
+		for i := range buf.msgs {
+			history[i] = buf.msgs[i]
+		}
+		buf.msgs = buf.msgs[:0]
+		buf.mu.Unlock()
+		// delete cache...
+		c.unsendCache.Delete(topic)
+		if len(history) > 0 {
+			c.msgEmitter.Emit(topic, history...)
+		}
 	}
+	return ch
+}
 
-	msgs := make([]msg.Message, 0, 30)
-	for {
-		select {
-		case msg, ok := <-ch:
+func (c *MemoryCache) unsubscribeHandler(runId string, handler <-chan emitter.Event) {
+	topic := fmt.Sprintf("%s:%s", EmitTopicPrefix, runId)
+	c.msgEmitter.Off(topic, handler)
+}
+
+func (c *MemoryCache) eventHandlerWrapper(msgFunc func(message msg.Message)) func(event *emitter.Event) {
+	return func(event *emitter.Event) {
+		for _, v := range event.Args {
+			message, ok := v.(msg.Message)
 			if !ok {
-				return msgs, nil
+				slog.Debugf("Seems like emitted arg (%s) is not a protomsg....", v)
+				continue
+				//return
 			}
-			msgs = append(msgs, msg)
-		default:
-			return msgs, nil
+			msgFunc(message)
 		}
 	}
-}
-
-func (m *MemoryCache) ReadUntil(runID string, callback func(message msg.Message) error, doneChan <-chan struct{}) error {
-	ch, exists := m.getChannel(runID)
-	if !exists {
-		return fmt.Errorf("cache for run %s not found", runID)
-	}
-
-	go func() {
-		for {
-			select {
-			case <-doneChan:
-				slog.Debugf("Stop reading from cache of %s", runID)
-				return
-
-			case msg, ok := <-ch:
-				if !ok {
-					slog.Debugf("channel of %s closed", runID)
-					return
-				}
-
-				if err := callback(msg); err != nil {
-					slog.Errorf("Callback error for %s: %v", runID, err)
-				}
-			}
-		}
-	}()
-
-	return nil
 }
