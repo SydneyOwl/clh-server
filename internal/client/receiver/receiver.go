@@ -90,14 +90,6 @@ func (r *Receiver) doLogin() error {
 	return nil
 }
 
-func (r *Receiver) doSendCommand(cmd string) {
-	wait, err := r.sendCommandAndWait(cmd, 5)
-	if err != nil {
-		slog.Warnf("Error sending command: %s", err)
-	}
-	slog.Infof("Got result: %s", wait)
-}
-
 func (r *Receiver) doHeartbeat() {
 	for {
 		err := msg.WriteMsg(r.conn, &msgproto.Ping{
@@ -150,7 +142,7 @@ func (r *Receiver) onCommandResponseReceived(mm msg1.Message) {
 	res <- a.Result
 }
 
-func (r *Receiver) sendCommandAndWait(command string, timeoutSec int) (*string, error) {
+func (r *Receiver) SendCommandAndWait(command string, params []string, timeoutSec int) (*string, error) {
 	ranId, _ := strutil.RandomString(6)
 	cc := make(chan string, 1)
 	r.mu.Lock()
@@ -167,7 +159,7 @@ func (r *Receiver) sendCommandAndWait(command string, timeoutSec int) (*string, 
 	err := r.dispatcher.Send(&msgproto.Command{
 		CommandId: ranId,
 		Command:   command,
-		Params:    nil,
+		Params:    params,
 	})
 	if err != nil {
 		return nil, err
@@ -196,7 +188,11 @@ func (r *Receiver) Run() {
 		return
 	}
 	go r.doHeartbeat()
-	r.doSendCommand("getSenderList")
+
 	<-r.dispatcher.Done()
 	slog.Infof("Receiver shutting down")
+}
+
+func (r *Receiver) Close() {
+	_ = r.conn.Close()
 }
