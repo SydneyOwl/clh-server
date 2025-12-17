@@ -29,9 +29,9 @@ func TestMemoryCache_PublishAndSubscribe(t *testing.T) {
 	// 3. 注册 subscriber
 	var received []msg.Message
 	var mu sync.Mutex
-	handler := func(m msg.Message) {
+	handler := func(m []msg.Message) {
 		mu.Lock()
-		received = append(received, m)
+		received = append(received, m...)
 		mu.Unlock()
 	}
 

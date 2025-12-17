@@ -2,22 +2,30 @@ package cache
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/ahmetb/go-linq/v4"
 	"github.com/gookit/slog"
 	"github.com/olebedev/emitter"
 	"github.com/patrickmn/go-cache"
+	"github.com/sydneyowl/clh-server/msgproto"
 	"github.com/sydneyowl/clh-server/pkg/msg"
 )
 
 const (
-	ChannelBufferSize    = 100
-	BufferSliceCap       = 50
-	UnsendExpireDuration = time.Minute * 30
-	UnsendCleanDuration  = time.Minute * 35
-	UnsendSizeLimit      = 200
-	EmitTopicPrefix      = "clhmsg"
+	ChannelBufferSize        = 100
+	BufferSliceCap           = 50
+	DigiStatusExpireDuration = time.Minute * 5
+	UnsendExpireDuration     = time.Minute * 30
+	UnsendCleanDuration      = time.Minute * 35
+	UnsendSizeLimit          = 200
+	EmitTopicPrefix          = "clhmsg"
+	TopicRunIdDivider        = "<<<"
+
+	// EmitTopicDigiStatusPrefix is not used as a emit topic; it's used as a go-cache key only!
+	EmitTopicDigiStatusPrefix = "clhmsgdigistat"
 )
 
 type TopicBuffer struct {
@@ -33,8 +41,21 @@ type MemoryCache struct {
 	mu sync.Mutex
 }
 
+func (c *MemoryCache) GetSenderList() []string {
+	var result []string
+	tp := c.msgEmitter.Topics()
+	linq.FromSlice(tp).SelectT(func(topic string) string {
+		idx := strings.Index(topic, TopicRunIdDivider)
+		if idx == -1 {
+			return topic
+		}
+		return topic[0:idx]
+	}).ToSlice(&result)
+	return result
+}
+
 func (c *MemoryCache) RemoveCache(runId string) {
-	topic := fmt.Sprintf("%s:%s", EmitTopicPrefix, runId)
+	topic := fmt.Sprintf("%s%s%s", EmitTopicPrefix, TopicRunIdDivider, runId)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.msgEmitter.Off(topic)
@@ -45,12 +66,15 @@ func (c *MemoryCache) PublishMessage(runId string, message msg.Message) error {
 	return c.publishMessage(runId, message)
 }
 
-func (c *MemoryCache) SubscribeHandler(runId string, handler func(message msg.Message)) (token any) {
+func (c *MemoryCache) SubscribeHandler(runId string, handler func(message []msg.Message)) (token any) {
 	wrapIt := c.eventHandlerWrapper(handler)
 	return c.subscribeHandler(runId, wrapIt)
 }
 
 func (c *MemoryCache) UnsubscribeHandler(runId string, token any) {
+	if token == nil {
+		return
+	}
 	c.unsubscribeHandler(runId, token.(<-chan emitter.Event))
 }
 
@@ -62,7 +86,14 @@ func NewMemoryCache() *MemoryCache {
 }
 
 func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
-	topic := fmt.Sprintf("%s:%s", EmitTopicPrefix, runId)
+	topic := fmt.Sprintf("%s%s%s", EmitTopicPrefix, TopicRunIdDivider, runId)
+	topicDigiStatus := fmt.Sprintf("%s%s%s", EmitTopicDigiStatusPrefix, TopicRunIdDivider, runId)
+
+	if _, ok := message.(*msgproto.Status); ok {
+		c.unsendCache.Set(topicDigiStatus, message, DigiStatusExpireDuration)
+		_ = c.msgEmitter.Emit(topic, message)
+		return nil
+	}
 
 	if len(c.msgEmitter.Listeners(topic)) != 0 {
 		_ = c.msgEmitter.Emit(topic, message)
@@ -98,7 +129,7 @@ func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
 }
 
 func (c *MemoryCache) subscribeHandler(runId string, handler func(event *emitter.Event)) <-chan emitter.Event {
-	topic := fmt.Sprintf("%s:%s", EmitTopicPrefix, runId)
+	topic := fmt.Sprintf("%s%s%s", EmitTopicPrefix, TopicRunIdDivider, runId)
 	ch := c.msgEmitter.On(topic, handler)
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -117,25 +148,30 @@ func (c *MemoryCache) subscribeHandler(runId string, handler func(event *emitter
 		if len(history) > 0 {
 			c.msgEmitter.Emit(topic, history...)
 		}
+		// emit recent digmode status, if exists...
+		if res, exist := c.unsendCache.Get(EmitTopicDigiStatusPrefix); exist {
+			c.msgEmitter.Emit(topic, res)
+		}
 	}
 	return ch
 }
 
 func (c *MemoryCache) unsubscribeHandler(runId string, handler <-chan emitter.Event) {
-	topic := fmt.Sprintf("%s:%s", EmitTopicPrefix, runId)
+	topic := fmt.Sprintf("%s%s%s", EmitTopicPrefix, TopicRunIdDivider, runId)
 	c.msgEmitter.Off(topic, handler)
 }
 
-func (c *MemoryCache) eventHandlerWrapper(msgFunc func(message msg.Message)) func(event *emitter.Event) {
+func (c *MemoryCache) eventHandlerWrapper(msgFunc func(message []msg.Message)) func(event *emitter.Event) {
 	return func(event *emitter.Event) {
+		msgDc := make([]msg.Message, 0, 10)
 		for _, v := range event.Args {
 			message, ok := v.(msg.Message)
 			if !ok {
 				slog.Debugf("Seems like emitted arg (%s) is not a protomsg....", v)
 				continue
-				//return
 			}
-			msgFunc(message)
+			msgDc = append(msgDc, message)
 		}
+		msgFunc(msgDc)
 	}
 }

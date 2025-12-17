@@ -2,6 +2,13 @@ syntax = "proto3";
 package msgproto.msg;
 option go_package = "github.com/sydneyowl/clh-server/msgproto";
 
+// Server will pack all cached message and send to client at once.
+message WsjtxMessagePacked{
+  Status status = 1;
+  repeated Decode decodes = 2;
+  repeated WSPRDecode wspr_decodes = 3;
+}
+
 message WsjtxMessage {
   oneof payload {
     Status status = 1;

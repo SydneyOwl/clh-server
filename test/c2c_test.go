@@ -74,7 +74,7 @@ func dohb(conn net.Conn) {
 			Timestamp: time.Now().Unix(),
 		})
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("HB" + err.Error())
 			return
 		}
 		time.Sleep(time.Second * 1)
