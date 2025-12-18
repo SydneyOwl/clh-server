@@ -44,12 +44,13 @@ type MemoryCache struct {
 func (c *MemoryCache) GetSenderList() []string {
 	var result []string
 	tp := c.msgEmitter.Topics()
+	slog.Infof("Getting sender list from %v", tp)
 	linq.FromSlice(tp).SelectT(func(topic string) string {
 		idx := strings.Index(topic, TopicRunIdDivider)
 		if idx == -1 {
 			return topic
 		}
-		return topic[0:idx]
+		return topic[idx:]
 	}).ToSlice(&result)
 	return result
 }
@@ -95,8 +96,8 @@ func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
 		return nil
 	}
 
+	_ = c.msgEmitter.Emit(topic, message)
 	if len(c.msgEmitter.Listeners(topic)) != 0 {
-		_ = c.msgEmitter.Emit(topic, message)
 		return nil
 	}
 

@@ -1,20 +1,25 @@
 package cmd
 
 import (
+	"fmt"
+	"log"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/gookit/slog"
 	"github.com/spf13/cobra"
 	"github.com/sydneyowl/clh-server/internal/client/pkg"
 	"github.com/sydneyowl/clh-server/internal/client/receiver"
-	"log"
-	"strings"
+	"github.com/sydneyowl/clh-server/msgproto"
+	"github.com/sydneyowl/clh-server/pkg/msg"
 )
 
 var (
-	serverIp       string
-	serverPort     int
-	useTLS         bool
-	key            string
-	skipVerifyCert bool
+	rServerIp       string
+	rServerPort     int
+	rUseTLS         bool
+	rkey            string
+	rSkipVerifyCert bool
 )
 
 // checkConfigCmd represents the checkConfig command
@@ -23,8 +28,17 @@ var runReceiver = &cobra.Command{
 	Short: "Run receiver example.",
 	Long:  `Run receiver example. This is for test usage only.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		receiver := receiver.NewReceiver(serverIp, serverPort, useTLS, key, skipVerifyCert)
-		p := tea.NewProgram(pkg.InitialModel(receiver.Run, func(command string) (string, error) {
+		receiver := receiver.NewReceiver(rServerIp, rServerPort, rUseTLS, rkey, rSkipVerifyCert)
+		if err := receiver.DoConn(); err != nil {
+			slog.Fatalf("Conn failed: %v", err)
+			return
+		}
+		if err := receiver.DoLogin(); err != nil {
+			slog.Fatalf("Login failed: %v", err)
+			return
+		}
+
+		model := pkg.InitialModel(receiver.Run, func(command string) (string, error) {
 			sp := strings.Split(command, " ")
 			if len(sp) == 0 {
 				return "", nil
@@ -50,8 +64,14 @@ var runReceiver = &cobra.Command{
 				return "", nil
 			}
 			return "", nil
-		}, receiver.Close))
+		}, receiver.Close)
 
+		p := tea.NewProgram(model) // fixme lock problem
+
+		receiver.Dispatcher.RegisterHandler(&msgproto.CommandResponse{}, receiver.OnCommandResponseReceived)
+		receiver.Dispatcher.RegisterDefaultHandler(func(message msg.Message) {
+			model.AppendInfo(fmt.Sprintf("%s", message))
+		})
 		if _, err := p.Run(); err != nil {
 			log.Fatal(err)
 		}
@@ -59,10 +79,10 @@ var runReceiver = &cobra.Command{
 }
 
 func init() {
-	runReceiver.Flags().StringVar(&serverIp, "ip", "127.0.0.1", "server ip")
-	runReceiver.Flags().IntVar(&serverPort, "port", 7410, "server port")
-	runReceiver.Flags().BoolVar(&useTLS, "tls", true, "use tls")
-	runReceiver.Flags().BoolVar(&skipVerifyCert, "skip-cert-verify", false, "skip certificate verification")
-	runReceiver.Flags().StringVar(&key, "key", "???", "key for conn auth usage")
+	runReceiver.Flags().StringVar(&rServerIp, "ip", "127.0.0.1", "server ip")
+	runReceiver.Flags().IntVar(&rServerPort, "port", 7410, "server port")
+	runReceiver.Flags().BoolVar(&rUseTLS, "tls", true, "use tls")
+	runReceiver.Flags().BoolVar(&rSkipVerifyCert, "skip-cert-verify", false, "skip certificate verification")
+	runReceiver.Flags().StringVar(&rkey, "key", "???", "key for conn auth usage")
 	rootCmd.AddCommand(runReceiver)
 }

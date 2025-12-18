@@ -5,9 +5,11 @@ package pkg
 
 import (
 	"fmt"
-	"github.com/gookit/slog"
 	"io"
 	"strings"
+	"sync"
+
+	"github.com/gookit/slog"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -23,10 +25,11 @@ type (
 
 type Model struct {
 	viewport    viewport.Model
-	messages    []string
+	messages    *[]string
 	textarea    textarea.Model
 	senderStyle lipgloss.Style
 	err         error
+	lock        *sync.RWMutex
 
 	endFunc  func()
 	writeCmd func(command string) (string, error)
@@ -59,13 +62,20 @@ func InitialModel(preExec func(), writeCmd func(command string) (string, error),
 
 	return Model{
 		textarea:    ta,
-		messages:    []string{},
+		messages:    &[]string{},
 		viewport:    vp,
 		senderStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
 		err:         nil,
+		lock:        &sync.RWMutex{},
 		endFunc:     endExec,
 		writeCmd:    writeCmd,
 	}
+}
+
+func (m Model) AppendInfo(info string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	*m.messages = append(*m.messages, info)
 }
 
 func (m Model) Init() tea.Cmd {
@@ -87,9 +97,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(gap)
 
-		if len(m.messages) > 0 {
+		if len(*m.messages) > 0 {
+			m.lock.RLock()
 			// Wrap content before setting it.
-			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(*m.messages, "\n")))
+			m.lock.RUnlock()
 		}
 		m.viewport.GotoBottom()
 	case tea.KeyMsg:
@@ -99,14 +111,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			fmt.Println(m.textarea.Value())
 			return m, tea.Quit
 		case tea.KeyEnter:
-			m.messages = append(m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
+			*m.messages = append(*m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
 			rep, err := m.writeCmd(m.textarea.Value())
+
+			m.lock.Lock()
 			if err != nil {
-				m.messages = append(m.messages, m.senderStyle.Render("Error: ")+err.Error())
+				*m.messages = append(*m.messages, m.senderStyle.Render("Error: ")+err.Error())
 			} else {
-				m.messages = append(m.messages, rep)
+				*m.messages = append(*m.messages, rep)
 			}
-			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(m.messages, "\n")))
+			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(*m.messages, "\n")))
+			m.lock.Unlock()
 			m.textarea.Reset()
 			m.viewport.GotoBottom()
 		}

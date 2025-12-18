@@ -48,10 +48,13 @@ func ValidateClientType(input string) (ClientType, error) {
 type Control struct {
 	ctx context.Context
 
-	clientType    ClientType
-	serverCfg     *config.Config
-	cache         cache.CLHCache
-	cacheToken    any
+	clientType ClientType
+	serverCfg  *config.Config
+	cache      cache.CLHCache
+
+	subscribedId string
+	cacheToken   any
+
 	lastPing      atomic.Value
 	doneCh        chan struct{}
 	runID         string
@@ -245,12 +248,13 @@ func (ctrl *Control) heartbeatChecker() {
 
 func (ctrl *Control) subscribe(targetRunId string) {
 	ctrl.unsubscribe()
+	ctrl.subscribedId = targetRunId
 	ctrl.cacheToken = ctrl.cache.SubscribeHandler(targetRunId, ctrl.doForward)
 }
 
 func (ctrl *Control) unsubscribe() {
 	if ctrl.cacheToken != nil {
-		ctrl.cache.UnsubscribeHandler(ctrl.runID, ctrl.cacheToken)
+		ctrl.cache.UnsubscribeHandler(ctrl.subscribedId, ctrl.cacheToken)
 	}
 }
 

@@ -15,7 +15,7 @@ type Debouncer struct {
 }
 
 func NewDebouncer(delay time.Duration) *Debouncer {
-	throttler := gohalt.NewThrottlerTimed(1, delay, 0)
+	throttler := gohalt.NewThrottlerTimed(20, delay, 0)
 	return &Debouncer{
 		runner: gohalt.NewRunnerAsync(context.Background(), throttler),
 	}
