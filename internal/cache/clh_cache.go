@@ -21,5 +21,5 @@ type CLHCache interface {
 	RemoveCache(runId string)
 
 	// GetSenderList gets available sender names.
-	GetSenderList() []string
+	//GetSenderList() []string
 }

@@ -1,5 +1,6 @@
 .idea
 clh-server
+clh-server.exe
 logs
 bin
 *.pb.*

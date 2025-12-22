@@ -48,9 +48,10 @@ func ValidateClientType(input string) (ClientType, error) {
 type Control struct {
 	ctx context.Context
 
-	clientType ClientType
-	serverCfg  *config.Config
-	cache      cache.CLHCache
+	clientType     ClientType
+	serverCfg      *config.Config
+	cache          cache.CLHCache
+	clientRegistry *ClientRegistry
 
 	subscribedId string
 	cacheToken   any
@@ -68,18 +69,20 @@ type Control struct {
 	msgSendQueue   []msg1.Message
 }
 
-func NewControl(cfg *config.Config, runID string, clientType ClientType, cache cache.CLHCache, conn net.Conn, ctx context.Context) *Control {
+func NewControl(cfg *config.Config, runID string, clientType ClientType,
+	cache cache.CLHCache, conn net.Conn, ctx context.Context, registry *ClientRegistry) *Control {
 	ctrl := &Control{
-		ctx:          ctx,
-		runID:        runID,
-		conn:         conn,
-		cache:        cache,
-		clientType:   clientType,
-		serverCfg:    cfg,
-		closeOnce:    &sync.Once{},
-		doneCh:       make(chan struct{}),
-		msgDebouncer: debounce.NewDebouncer(debounceInterval),
-		msgSendQueue: make([]msg1.Message, 0),
+		ctx:            ctx,
+		runID:          runID,
+		conn:           conn,
+		cache:          cache,
+		clientType:     clientType,
+		serverCfg:      cfg,
+		closeOnce:      &sync.Once{},
+		doneCh:         make(chan struct{}),
+		msgDebouncer:   debounce.NewDebouncer(debounceInterval),
+		msgSendQueue:   make([]msg1.Message, 0),
+		clientRegistry: registry,
 	}
 	ctrl.lastPing.Store(time.Now())
 	ctrl.msgDispatcher = msg.NewDispatcher(ctrl.conn)
@@ -90,6 +93,10 @@ func NewControl(cfg *config.Config, runID string, clientType ClientType, cache c
 		ctrl.regReceiverMsgHandlers()
 	}
 	return ctrl
+}
+
+func (ctrl *Control) GetClientType() ClientType {
+	return ctrl.clientType
 }
 
 func (ctrl *Control) Run() {
@@ -200,7 +207,7 @@ func (ctrl *Control) commandHandler(msg msg1.Message) {
 	}
 	switch CommandType(command.Command) {
 	case subscribe:
-		if command.Params == nil || len(command.Params) < 1 {
+		if len(command.Params) < 1 {
 			_ = ctrl.respondCommand(false, "Invalid command parameters.", command.CommandId)
 			return
 		}
@@ -210,7 +217,7 @@ func (ctrl *Control) commandHandler(msg msg1.Message) {
 		ctrl.unsubscribe()
 		_ = ctrl.respondCommand(true, "", command.CommandId)
 	case getSenderList:
-		ls := ctrl.cache.GetSenderList()
+		ls := ctrl.clientRegistry.GetSenders()
 		// todo for now we use this seperator...
 		res := strings.Join(ls, ",,,")
 		_ = ctrl.respondCommand(true, res, command.CommandId)

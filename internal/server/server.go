@@ -23,24 +23,26 @@ const (
 )
 
 type Service struct {
-	cfg         *config.Config
-	ctrlManager *ControlManager
-	cache       cache.CLHCache
-	tlsEnabled  bool
-	tlsConfig   *tls.Config
-	ctx         context.Context
-	cancel      context.CancelFunc
-	listener    net.Listener
-	verifier    verifier.Verifier
+	cfg            *config.Config
+	ctrlManager    *ControlManager
+	clientRegistry *ClientRegistry
+	cache          cache.CLHCache
+	tlsEnabled     bool
+	tlsConfig      *tls.Config
+	ctx            context.Context
+	cancel         context.CancelFunc
+	listener       net.Listener
+	verifier       verifier.Verifier
 }
 
 func NewService(cfg *config.Config) (*Service, error) {
 	svr := &Service{
-		cfg:         cfg,
-		ctrlManager: NewControlManager(),
-		cache:       cache.NewMemoryCache(),
-		tlsEnabled:  cfg.Server.Encrypt.EnableTLS,
-		verifier:    verifier.NewAuthKeyVerifier(cfg.Server.Encrypt.Key),
+		cfg:            cfg,
+		ctrlManager:    NewControlManager(),
+		clientRegistry: NewClientRegistry(0),
+		cache:          cache.NewMemoryCache(),
+		tlsEnabled:     cfg.Server.Encrypt.EnableTLS,
+		verifier:       verifier.NewAuthKeyVerifier(cfg.Server.Encrypt.Key),
 	}
 
 	if svr.tlsEnabled {
@@ -154,16 +156,22 @@ func (svr *Service) handleConn(conn net.Conn) {
 			Accept: true,
 			Error:  "",
 		})
-		ctl := NewControl(svr.cfg, m.RunId, clientType, svr.cache, conn, svr.ctx)
+		// create control with a lightweight callback to get current senders
+		ctl := NewControl(svr.cfg, m.RunId, clientType, svr.cache, conn, svr.ctx, svr.clientRegistry)
 		// pop out dupe conn
 		if old := svr.ctrlManager.Add(m.RunId, ctl); old != nil {
 			old.WaitForQuit()
 			slog.Infof(" [%s] replaced by new client.", old.runID)
 		}
+		// register client in registry
+		svr.clientRegistry.Register(ClientInfo{RunID: m.RunId, Type: clientType, Addr: conn.RemoteAddr().String()})
+
 		go ctl.Run()
 		go func() {
 			ctl.WaitForQuit()
 			svr.ctrlManager.Del(m.RunId, ctl)
+			// unregister from registry
+			svr.clientRegistry.Unregister(m.RunId)
 			slog.Tracef("Released %s from ctrl manager.", m.RunId)
 		}()
 	default:
