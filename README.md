@@ -1,0 +1,32 @@
+# clh-server [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SydneyOwl/clh-server)
+
+`clh-server` is the server side of Cloudlog Helper. It caches or forwards messages from WSJT-X or similar applications to multiple compatible clients that subscribe to specific endpoints.
+
+## Overview
+
+Riginfo/WSJT-X Info -> clh-client (sender) -> clh-server -> clh-client (receiver) -> multiple endpoints
+
+## Installation
+
+1. Clone the repository
+2. Run `make init` to install dependencies
+3. Run `make proto` to generate protobuf files
+4. Run `make build` to build the binary
+
+## Usage
+
+1. Initialize config: `clh-server init-config`
+2. Check config: `clh-server check-config`
+3. Run server: `clh-server`
+
+## Configuration
+
+See the generated config.yaml for options.
+
+## Commands
+
+- `init-config`: Generate default config
+- `check-config`: Validate config
+- `run-receiver`: Run example receiver client
+- `run-sender`: Run example sender client
+

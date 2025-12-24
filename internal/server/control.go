@@ -115,8 +115,8 @@ func (ctrl *Control) Replace(newCtl *Control) {
 
 func (ctrl *Control) WaitForQuit() {
 	<-ctrl.doneCh
-	if ctrl.clientType == receiver {
-		ctrl.cache.UnsubscribeHandler(ctrl.runID, ctrl.cacheToken)
+	if ctrl.clientType == receiver && ctrl.cacheToken != nil {
+		ctrl.cache.UnsubscribeHandler(ctrl.subscribedId, ctrl.cacheToken)
 	}
 	if ctrl.clientType == sender {
 		ctrl.cache.RemoveCache(ctrl.runID)
@@ -161,7 +161,7 @@ func (ctrl *Control) heartbeatHandler(msg msg1.Message) {
 	if math.Abs(float64(ping.Timestamp-time.Now().Unix())) > 10 {
 		_ = ctrl.msgDispatcher.Send(&msgproto.Pong{
 			Ack:   false,
-			Error: "Invalid timstamp. Check ur clock!",
+			Error: "Invalid timestamp. Check your clock!",
 		})
 		return
 	}
@@ -218,7 +218,7 @@ func (ctrl *Control) commandHandler(msg msg1.Message) {
 		_ = ctrl.respondCommand(true, "", command.CommandId)
 	case getSenderList:
 		ls := ctrl.clientRegistry.GetSenders()
-		// todo for now we use this seperator...
+		// todo for now we use this separator...
 		res := strings.Join(ls, ",,,")
 		_ = ctrl.respondCommand(true, res, command.CommandId)
 	}
@@ -262,6 +262,8 @@ func (ctrl *Control) subscribe(targetRunId string) {
 func (ctrl *Control) unsubscribe() {
 	if ctrl.cacheToken != nil {
 		ctrl.cache.UnsubscribeHandler(ctrl.subscribedId, ctrl.cacheToken)
+		ctrl.cacheToken = nil
+		ctrl.subscribedId = ""
 	}
 }
 
@@ -313,6 +315,8 @@ func (ctrl *Control) doForward(message []msg1.Message) {
 		if err := ctrl.msgDispatcher.Send(tbs); err != nil {
 			slog.Warnf("Failed to forward message to %s: %s", ctrl.runID, err)
 		}
+
+		slog.Tracef("%v", tbs)
 	}, &ctrl.msgSendQueue)
 }
 

@@ -82,7 +82,6 @@ func (s *Sender) genRandomMsg() msg1.Message {
 			},
 			Timestamp: time.Now().UnixNano(),
 		}
-	default:
-		panic("THIS IS IMPOSSIBLE!!")
 	}
+	return nil
 }

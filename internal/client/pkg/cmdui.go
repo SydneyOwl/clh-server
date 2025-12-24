@@ -1,8 +1,5 @@
 package pkg
 
-// A simple program demonstrating the text area component from the Bubbles
-// component library.
-
 import (
 	"fmt"
 	"io"
@@ -23,9 +20,19 @@ type (
 	errMsg error
 )
 
+// Custom message types for async operations
+type ResponseMsg struct {
+	Response string
+	Err      error
+}
+
+type commandMsg struct {
+	command string
+}
+
 type Model struct {
 	viewport    viewport.Model
-	messages    *[]string
+	messages    []string
 	textarea    textarea.Model
 	senderStyle lipgloss.Style
 	err         error
@@ -33,6 +40,10 @@ type Model struct {
 
 	endFunc  func()
 	writeCmd func(command string) (string, error)
+
+	ready       bool
+	initialized bool
+	loading     bool // Track if we're waiting for a response
 }
 
 func InitialModel(preExec func(), writeCmd func(command string) (string, error), endExec func()) Model {
@@ -62,20 +73,38 @@ func InitialModel(preExec func(), writeCmd func(command string) (string, error),
 
 	return Model{
 		textarea:    ta,
-		messages:    &[]string{},
+		messages:    []string{},
 		viewport:    vp,
 		senderStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
 		err:         nil,
 		lock:        &sync.RWMutex{},
 		endFunc:     endExec,
 		writeCmd:    writeCmd,
+		ready:       false,
+		initialized: false,
+		loading:     false,
 	}
 }
 
-func (m Model) AppendInfo(info string) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	*m.messages = append(*m.messages, info)
+// Helper method to render all messages
+func (m *Model) renderMessages() string {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	if len(m.messages) == 0 {
+		return "No messages yet..."
+	}
+
+	// Join messages with newlines
+	return strings.Join(m.messages, "\n")
+}
+
+// Async function to send command and get response
+func (m *Model) sendCommandAsync(command string) tea.Cmd {
+	return func() tea.Msg {
+		response, err := m.writeCmd(command)
+		return ResponseMsg{Response: response, Err: err}
+	}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -86,56 +115,135 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		tiCmd tea.Cmd
 		vpCmd tea.Cmd
+		cmds  []tea.Cmd
 	)
 
 	m.textarea, tiCmd = m.textarea.Update(msg)
 	m.viewport, vpCmd = m.viewport.Update(msg)
 
+	if tiCmd != nil {
+		cmds = append(cmds, tiCmd)
+	}
+	if vpCmd != nil {
+		cmds = append(cmds, vpCmd)
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.viewport.Width = msg.Width
-		m.textarea.SetWidth(msg.Width)
-		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(gap)
-
-		if len(*m.messages) > 0 {
-			m.lock.RLock()
-			// Wrap content before setting it.
-			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(*m.messages, "\n")))
-			m.lock.RUnlock()
+		// Handle initial window size
+		if !m.ready {
+			m.viewport = viewport.New(msg.Width, msg.Height-5)
+			m.viewport.HighPerformanceRendering = false
+			m.ready = true
+			m.viewport.SetContent(m.renderMessages())
+			m.viewport.GotoBottom()
+		} else {
+			// Update existing viewport size
+			m.viewport.Width = msg.Width
+			m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(gap)
+			m.textarea.SetWidth(msg.Width)
+			m.viewport.SetContent(m.renderMessages())
 		}
-		m.viewport.GotoBottom()
+
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
-			m.endFunc()
-			fmt.Println(m.textarea.Value())
-			return m, tea.Quit
-		case tea.KeyEnter:
-			*m.messages = append(*m.messages, m.senderStyle.Render("You: ")+m.textarea.Value())
-			rep, err := m.writeCmd(m.textarea.Value())
-
-			m.lock.Lock()
-			if err != nil {
-				*m.messages = append(*m.messages, m.senderStyle.Render("Error: ")+err.Error())
-			} else {
-				*m.messages = append(*m.messages, rep)
+			if m.endFunc != nil {
+				m.endFunc()
 			}
-			m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width).Render(strings.Join(*m.messages, "\n")))
+			return m, tea.Quit
+
+		case tea.KeyEnter:
+			command := strings.TrimSpace(m.textarea.Value())
+			if command == "" {
+				return m, tea.Batch(cmds...)
+			}
+
+			// Add user message
+			m.lock.Lock()
+			m.messages = append(m.messages, m.senderStyle.Render("You: ")+command)
 			m.lock.Unlock()
-			m.textarea.Reset()
+
+			// Update viewport immediately
+			content := m.renderMessages()
+			m.viewport.SetContent(content)
 			m.viewport.GotoBottom()
+
+			// Reset textarea
+			m.textarea.Reset()
+
+			// Set loading state
+			m.loading = true
+
+			// Add loading message
+			m.lock.Lock()
+			m.messages = append(m.messages, "⏳ Processing...")
+			m.lock.Unlock()
+			content = m.renderMessages()
+			m.viewport.SetContent(content)
+			m.viewport.GotoBottom()
+
+			// Send command asynchronously and return cmd to Bubble Tea
+			return m, tea.Batch(
+				m.sendCommandAsync(command),
+				tea.Batch(cmds...),
+			)
 		}
 
-	// We handle errors just like any other message
+	case ResponseMsg:
+		// Handle the async response
+		m.loading = false
+
+		// Remove the "Processing..." message
+		m.lock.Lock()
+		if len(m.messages) > 0 && m.messages[len(m.messages)-1] == "⏳ Processing..." {
+			m.messages = m.messages[:len(m.messages)-1]
+		}
+
+		// Add response or error
+		if msg.Err != nil {
+			m.messages = append(m.messages, m.senderStyle.Render("Error: ")+msg.Err.Error())
+		} else if msg.Response != "" {
+			m.messages = append(m.messages, msg.Response)
+		} else {
+			m.messages = append(m.messages, "(No response)")
+		}
+		m.lock.Unlock()
+
+		// Update viewport
+		content := m.renderMessages()
+		m.viewport.SetContent(content)
+		m.viewport.GotoBottom()
+
+		return m, tea.Batch(cmds...)
+
 	case errMsg:
 		m.err = msg
 		return m, nil
 	}
 
-	return m, tea.Batch(tiCmd, vpCmd)
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
+	if !m.ready {
+		return "\n  Initializing..."
+	}
+
+	// Ensure viewport has content
+	if m.viewport.View() == "" {
+		m.viewport.SetContent(m.renderMessages())
+	}
+
+	// Calculate proper heights
+	//textareaHeight := lipgloss.Height(m.textarea.View())
+	//gapHeight := lipgloss.Height(gap)
+
+	// Adjust viewport height if needed
+	if m.viewport.Height <= 0 {
+		m.viewport.Height = 5
+	}
+
 	return fmt.Sprintf(
 		"%s%s%s",
 		m.viewport.View(),

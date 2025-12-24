@@ -147,6 +147,7 @@ func (svr *Service) handleConn(conn net.Conn) {
 				Error:  err.Error(),
 			})
 			_ = conn.Close()
+			return
 		}
 
 		// accept connection

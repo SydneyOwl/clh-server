@@ -12,7 +12,7 @@ import (
 
 var overwriteFile bool
 
-// initConfigCmd represents the initConfig command
+// initConfigCmd represents the init-config command
 var initConfigCmd = &cobra.Command{
 	Use:   "init-config",
 	Short: "Release a empty config template.",

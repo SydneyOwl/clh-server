@@ -2,9 +2,9 @@ package client
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,10 +37,11 @@ func (c *Client) DoConn() error {
 		conn net.Conn
 		err  error
 	)
+	addr := net.JoinHostPort(c.ServerIp, strconv.Itoa(c.ServerPort))
 	if !c.UseTLS {
-		conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", c.ServerIp, c.ServerPort))
+		conn, err = net.Dial("tcp", addr)
 	} else {
-		conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", c.ServerIp, c.ServerPort), &tls.Config{InsecureSkipVerify: c.SkipCertVerify})
+		conn, err = tls.Dial("tcp", addr, &tls.Config{InsecureSkipVerify: c.SkipCertVerify})
 	}
 	if err != nil {
 		return err
@@ -72,11 +73,8 @@ func (c *Client) DoLogin() error {
 	slog.Infof("Connected to server successfully. Got acked runID %s", response.RunId)
 	_ = c.Conn.SetReadDeadline(time.Time{})
 	c.Dispatcher = msg.NewDispatcher(c.Conn)
-	c.Dispatcher.RegisterDefaultHandler(func(msg msg1.Message) {
-		slog.Warnf("WTF? Unknown message received: %T ", msg)
-	})
 	c.Dispatcher.RegisterHandler(&msgproto.Pong{}, c.onHBReceived)
-	c.Dispatcher.RegisterHandler(&msgproto.CommonResponse{}, c.onCommonResponseReceived)
+	c.Dispatcher.RegisterDefaultHandler(c.onDefaultFallbackReceived)
 	c.LastAck.Store(time.Now().Unix())
 	return nil
 }
@@ -112,26 +110,18 @@ func (c *Client) onHBReceived(mm msg1.Message) {
 func (c *Client) scanHeartbeatTimeout() {
 	tt := time.NewTicker(time.Second * 2)
 	defer tt.Stop()
-	for {
-		select {
-		case <-tt.C:
-			lastHB := c.LastAck.Load()
-			if time.Now().Unix()-lastHB > 5 {
-				slog.Errorf("HB timeout")
-				_ = c.Conn.Close()
-				os.Exit(0)
-			}
+	for range tt.C {
+		lastHB := c.LastAck.Load()
+		if time.Now().Unix()-lastHB > 10 {
+			slog.Errorf("HB timeout")
+			_ = c.Conn.Close()
+			os.Exit(0)
 		}
 	}
 }
 
-func (c *Client) onCommonResponseReceived(mm msg1.Message) {
-	a, ok := mm.(*msgproto.CommonResponse)
-	if !ok {
-		slog.Errorf("Cannot convert message to CommonResponse: %v", mm)
-		return
-	}
-	slog.Info(a.Message)
+func (c *Client) onDefaultFallbackReceived(mm msg1.Message) {
+	slog.Info(mm)
 }
 
 func (c *Client) Run() {

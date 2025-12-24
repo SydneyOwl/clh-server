@@ -12,6 +12,7 @@ import (
 	"github.com/sydneyowl/clh-server/internal/client/receiver"
 	"github.com/sydneyowl/clh-server/msgproto"
 	"github.com/sydneyowl/clh-server/pkg/msg"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 var (
@@ -22,7 +23,7 @@ var (
 	rSkipVerifyCert bool
 )
 
-// checkConfigCmd represents the checkConfig command
+// runReceiver represents the run-receiver command
 var runReceiver = &cobra.Command{
 	Use:   "run-receiver",
 	Short: "Run receiver example.",
@@ -30,7 +31,7 @@ var runReceiver = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		receiver := receiver.NewReceiver(rServerIp, rServerPort, rUseTLS, rkey, rSkipVerifyCert)
 		if err := receiver.DoConn(); err != nil {
-			slog.Fatalf("Conn failed: %v", err)
+			slog.Fatalf("Connection failed: %v", err)
 			return
 		}
 		if err := receiver.DoLogin(); err != nil {
@@ -66,13 +67,19 @@ var runReceiver = &cobra.Command{
 			return "", nil
 		}, receiver.Close)
 
-		p := tea.NewProgram(model) // fixme lock problem
+		var program *tea.Program
+		program = tea.NewProgram(model) // fixme lock problem
 
 		receiver.Dispatcher.RegisterHandler(&msgproto.CommandResponse{}, receiver.OnCommandResponseReceived)
-		receiver.Dispatcher.RegisterDefaultHandler(func(message msg.Message) {
-			model.AppendInfo(fmt.Sprintf("%s", message))
+		receiver.Dispatcher.RegisterHandler(&msgproto.WsjtxMessagePacked{}, func(message msg.Message) {
+			data, err := protojson.Marshal(message)
+			if err != nil {
+				program.Send(pkg.ResponseMsg{Response: fmt.Sprintf("Error marshaling message: %v", err), Err: nil})
+			} else {
+				program.Send(pkg.ResponseMsg{Response: string(data), Err: nil})
+			}
 		})
-		if _, err := p.Run(); err != nil {
+		if _, err := program.Run(); err != nil {
 			log.Fatal(err)
 		}
 	},

@@ -74,7 +74,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgFilePath, "config", "c", "", "config file (default is .clh-server.yaml)")
+	rootCmd.PersistentFlags().StringVarP(&cfgFilePath, "config", "c", "", "config file (default is ./clh-server.yaml)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "use verbose output(console).")
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

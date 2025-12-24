@@ -16,11 +16,9 @@ var (
 	sUseTLS         bool
 	skey            string
 	sSkipVerifyCert bool
-
-	doneChan chan struct{}
 )
 
-// checkConfigCmd represents the checkConfig command
+// runSender represents the run-sender command
 var runSender = &cobra.Command{
 	Use:   "run-sender",
 	Short: "Run sender example.",
@@ -28,17 +26,21 @@ var runSender = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		sender := sender.NewSender(sServerIp, sServerPort, sUseTLS, skey, sSkipVerifyCert)
 		if err := sender.DoConn(); err != nil {
-			slog.Fatalf("Conn failed: %v", err)
+			slog.Fatalf("Connection failed: %v", err)
 			return
 		}
 		if err := sender.DoLogin(); err != nil {
 			slog.Fatalf("Login failed: %v", err)
 			return
 		}
+		doneChan := make(chan struct{})
 		p := tea.NewProgram(pkg.InitialModel(sender.Run, func(command string) (string, error) {
 			return "", nil
 		}, func() {
-			doneChan <- struct{}{}
+			select {
+			case doneChan <- struct{}{}:
+			default:
+			}
 			sender.Close()
 		}))
 
@@ -51,8 +53,6 @@ var runSender = &cobra.Command{
 }
 
 func init() {
-	doneChan = make(chan struct{})
-
 	runSender.Flags().StringVar(&sServerIp, "ip", "127.0.0.1", "server ip")
 	runSender.Flags().IntVar(&sServerPort, "port", 7410, "server port")
 	runSender.Flags().BoolVar(&sUseTLS, "tls", true, "use tls")

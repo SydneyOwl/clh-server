@@ -19,7 +19,7 @@ func (akv *AuthKeyVerifier) VerifyLogin(m *msgproto.HandshakeRequest) error {
 		return errors.New("no run id provided")
 	}
 	// verify if key matches using our private key
-	if math.Abs(float64(m.Timestamp-time.Now().Unix())) > 5 {
+	if math.Abs(float64(m.Timestamp-time.Now().Unix())) > 10 {
 		return errors.New("invalid timestamp")
 	}
 

@@ -2,11 +2,9 @@ package cache
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/ahmetb/go-linq/v4"
 	"github.com/gookit/slog"
 	"github.com/olebedev/emitter"
 	"github.com/patrickmn/go-cache"
@@ -21,11 +19,11 @@ const (
 	UnsendExpireDuration     = time.Minute * 30
 	UnsendCleanDuration      = time.Minute * 35
 	UnsendSizeLimit          = 200
-	EmitTopicPrefix          = "clhmsg"
-	TopicRunIdDivider        = "<<<"
+	EmitTopicPostfix         = "clhmsg" // runID:xxx
+	TopicRunIdDivider        = ":"
 
-	// EmitTopicDigiStatusPrefix is not used as a emit topic; it's used as a go-cache key only!
-	EmitTopicDigiStatusPrefix = "clhmsgdigistat"
+	// EmitTopicDigiStatusPostfix is not used as a emit topic; it's used as a go-cache key only!
+	EmitTopicDigiStatusPostfix = "clhmsgdigistat"
 )
 
 type TopicBuffer struct {
@@ -41,22 +39,8 @@ type MemoryCache struct {
 	mu sync.Mutex
 }
 
-func (c *MemoryCache) GetSenderList() []string {
-	var result []string
-	tp := c.msgEmitter.Topics()
-	slog.Infof("Getting sender list from %v", tp)
-	linq.FromSlice(tp).SelectT(func(topic string) string {
-		idx := strings.Index(topic, TopicRunIdDivider)
-		if idx == -1 {
-			return topic
-		}
-		return topic[idx:]
-	}).ToSlice(&result)
-	return result
-}
-
 func (c *MemoryCache) RemoveCache(runId string) {
-	topic := fmt.Sprintf("%s%s%s", EmitTopicPrefix, TopicRunIdDivider, runId)
+	topic := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicPostfix)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.msgEmitter.Off(topic)
@@ -87,23 +71,25 @@ func NewMemoryCache() *MemoryCache {
 }
 
 func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
-	topic := fmt.Sprintf("%s%s%s", EmitTopicPrefix, TopicRunIdDivider, runId)
-	topicDigiStatus := fmt.Sprintf("%s%s%s", EmitTopicDigiStatusPrefix, TopicRunIdDivider, runId)
+	topic := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicPostfix)
+	topicDigiStatus := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicDigiStatusPostfix)
 
 	if _, ok := message.(*msgproto.Status); ok {
 		c.unsendCache.Set(topicDigiStatus, message, DigiStatusExpireDuration)
+		return nil
+	}
+
+	if len(c.msgEmitter.Listeners(topic)) != 0 {
+		slog.Tracef("Listener for %s exists. Emit it and skip caching.", topic)
 		_ = c.msgEmitter.Emit(topic, message)
 		return nil
 	}
 
-	_ = c.msgEmitter.Emit(topic, message)
-	if len(c.msgEmitter.Listeners(topic)) != 0 {
-		return nil
-	}
-
 	// there's no handler that subscribes this topic - we just cache it for future usage.
+	slog.Tracef("Listener for %s does not exists! Caching message.", topic)
 	cc, found := c.unsendCache.Get(topic)
 	if !found {
+		slog.Tracef("-> new cache for %s.", topic)
 		t := &TopicBuffer{
 			mu:   sync.Mutex{},
 			msgs: make([]msg.Message, 0, BufferSliceCap),
@@ -113,6 +99,7 @@ func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
 		t.mu.Unlock()
 		c.unsendCache.Set(topic, t, cache.DefaultExpiration)
 	} else {
+		slog.Tracef("-> reusing cache for %s.", topic)
 		mm, ok := cc.(*TopicBuffer)
 		if !ok {
 			return fmt.Errorf("unexpected type %T", cc)
@@ -130,35 +117,38 @@ func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
 }
 
 func (c *MemoryCache) subscribeHandler(runId string, handler func(event *emitter.Event)) <-chan emitter.Event {
-	topic := fmt.Sprintf("%s%s%s", EmitTopicPrefix, TopicRunIdDivider, runId)
+	topic := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicPostfix)
+	statusTopic := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicDigiStatusPostfix)
 	ch := c.msgEmitter.On(topic, handler)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// if we're the first subscriber... send all buffered messages!
 	if cc, found := c.unsendCache.Get(topic); found {
+		slog.Tracef("Fetching all contents of %s and packing for forwarding...", topic)
 		buf := cc.(*TopicBuffer)
 		buf.mu.Lock()
-		history := make([]any, len(buf.msgs), BufferSliceCap)
+		history := make([]any, len(buf.msgs))
 		for i := range buf.msgs {
 			history[i] = buf.msgs[i]
 		}
 		buf.msgs = buf.msgs[:0]
 		buf.mu.Unlock()
 		// delete cache...
-		c.unsendCache.Delete(topic)
+		//c.unsendCache.Delete(topic)
 		if len(history) > 0 {
 			c.msgEmitter.Emit(topic, history...)
 		}
-		// emit recent digmode status, if exists...
-		if res, exist := c.unsendCache.Get(EmitTopicDigiStatusPrefix); exist {
-			c.msgEmitter.Emit(topic, res)
-		}
+	}
+	// emit recent digmode status, if exists...
+	if res, exist := c.unsendCache.Get(statusTopic); exist {
+		slog.Tracef("Fetching status of %s for forwarding...", statusTopic)
+		c.msgEmitter.Emit(topic, res)
 	}
 	return ch
 }
 
 func (c *MemoryCache) unsubscribeHandler(runId string, handler <-chan emitter.Event) {
-	topic := fmt.Sprintf("%s%s%s", EmitTopicPrefix, TopicRunIdDivider, runId)
+	topic := fmt.Sprintf("%s*", runId)
 	c.msgEmitter.Off(topic, handler)
 }
 
