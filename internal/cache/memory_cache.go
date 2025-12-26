@@ -13,15 +13,17 @@ import (
 )
 
 const (
-	ChannelBufferSize        = 100
-	BufferSliceCap           = 50
-	DigiStatusExpireDuration = time.Minute * 5
-	UnsendExpireDuration     = time.Minute * 30
-	UnsendCleanDuration      = time.Minute * 35
-	UnsendSizeLimit          = 200
-	EmitTopicPostfix         = "clhmsg" // runID:xxx
-	TopicRunIdDivider        = ":"
+	ChannelBufferSize    = 100
+	BufferSliceCap       = 50
+	StatusExpireDuration = time.Minute * 5
+	UnsendExpireDuration = time.Minute * 30
+	UnsendCleanDuration  = time.Minute * 35
+	UnsendSizeLimit      = 200
+	EmitTopicPostfix     = "clhmsg" // runID:xxx
+	TopicRunIdDivider    = ":"
 
+	// EmitTopicRigStatusPostfix is not used as a emit topic; it's used as a go-cache key only!
+	EmitTopicRigStatusPostfix = "clhmsgrigstat"
 	// EmitTopicDigiStatusPostfix is not used as a emit topic; it's used as a go-cache key only!
 	EmitTopicDigiStatusPostfix = "clhmsgdigistat"
 )
@@ -73,9 +75,15 @@ func NewMemoryCache() *MemoryCache {
 func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
 	topic := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicPostfix)
 	topicDigiStatus := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicDigiStatusPostfix)
+	topicRigStatus := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicRigStatusPostfix)
 
 	if _, ok := message.(*msgproto.Status); ok {
-		c.unsendCache.Set(topicDigiStatus, message, DigiStatusExpireDuration)
+		c.unsendCache.Set(topicDigiStatus, message, StatusExpireDuration)
+		return nil
+	}
+
+	if _, ok := message.(*msgproto.RigData); ok {
+		c.unsendCache.Set(topicRigStatus, message, StatusExpireDuration)
 		return nil
 	}
 
@@ -118,7 +126,8 @@ func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
 
 func (c *MemoryCache) subscribeHandler(runId string, handler func(event *emitter.Event)) <-chan emitter.Event {
 	topic := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicPostfix)
-	statusTopic := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicDigiStatusPostfix)
+	statusDigi := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicDigiStatusPostfix)
+	statusRigdata := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicDigiStatusPostfix)
 	ch := c.msgEmitter.On(topic, handler)
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -139,9 +148,14 @@ func (c *MemoryCache) subscribeHandler(runId string, handler func(event *emitter
 			c.msgEmitter.Emit(topic, history...)
 		}
 	}
+	// emit recent rigdata, if exists...
+	if res, exist := c.unsendCache.Get(statusRigdata); exist {
+		slog.Tracef("Fetching rig of %s for forwarding...", statusDigi)
+		c.msgEmitter.Emit(topic, res)
+	}
 	// emit recent digmode status, if exists...
-	if res, exist := c.unsendCache.Get(statusTopic); exist {
-		slog.Tracef("Fetching status of %s for forwarding...", statusTopic)
+	if res, exist := c.unsendCache.Get(statusDigi); exist {
+		slog.Tracef("Fetching status of %s for forwarding...", statusDigi)
 		c.msgEmitter.Emit(topic, res)
 	}
 	return ch

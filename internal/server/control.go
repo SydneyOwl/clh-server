@@ -143,6 +143,7 @@ func (ctrl *Control) regSenderMsgHandlers() {
 	slog.Tracef("Registering message handlers for sender")
 	ctrl.msgDispatcher.RegisterHandler(&msgproto.Ping{}, ctrl.heartbeatHandler)
 	ctrl.msgDispatcher.RegisterHandler(&msgproto.WsjtxMessage{}, ctrl.wsjtxMsgHandler)
+	ctrl.msgDispatcher.RegisterHandler(&msgproto.RigData{}, ctrl.rigDataMsgHander)
 	ctrl.msgDispatcher.RegisterDefaultHandler(ctrl.defaultHandler)
 }
 
@@ -197,6 +198,17 @@ func (ctrl *Control) wsjtxMsgHandler(msg msg1.Message) {
 		return
 	}
 	//_ = ctrl.respondCommand(true, "")
+}
+
+func (ctrl *Control) rigDataMsgHander(msg msg1.Message) {
+	sub, success := tryUnwrapMessage[*msgproto.RigData](msg, ctrl.msgDispatcher)
+	if !success {
+		return
+	}
+	if prodErr := ctrl.cache.PublishMessage(ctrl.runID, sub); prodErr != nil {
+		slog.Error(prodErr.Error())
+		return
+	}
 }
 
 func (ctrl *Control) commandHandler(msg msg1.Message) {
