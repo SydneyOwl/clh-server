@@ -6,8 +6,8 @@ import (
 
 	"github.com/gookit/goutil/strutil"
 	"github.com/gookit/slog"
+	"github.com/sydneyowl/clh-server/clh-proto"
 	"github.com/sydneyowl/clh-server/internal/client"
-	"github.com/sydneyowl/clh-server/msgproto"
 	msg1 "github.com/sydneyowl/clh-server/pkg/msg"
 )
 
@@ -32,7 +32,7 @@ func NewReceiver(serverIp string, serverPort int, useTLS bool, key string, skipC
 }
 
 func (r *Receiver) OnCommandResponseReceived(mm msg1.Message) {
-	a, ok := mm.(*msgproto.CommandResponse)
+	a, ok := mm.(*clh_proto.CommandResponse)
 	if !ok {
 		slog.Errorf("Cannot convert message to CommandResponse: %v", mm)
 		return
@@ -61,7 +61,7 @@ func (r *Receiver) SendCommandAndWait(command string, params []string, timeoutSe
 		delete(r.commandPendingMap, ranId)
 	}()
 
-	err := r.Client.Dispatcher.Send(&msgproto.Command{
+	err := r.Client.Dispatcher.Send(&clh_proto.Command{
 		CommandId: ranId,
 		Command:   command,
 		Params:    params,

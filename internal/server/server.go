@@ -10,9 +10,9 @@ import (
 	"github.com/sydneyowl/clh-server/internal/cache"
 
 	"github.com/gookit/slog"
+	"github.com/sydneyowl/clh-server/clh-proto"
 	"github.com/sydneyowl/clh-server/internal/msg"
 	"github.com/sydneyowl/clh-server/internal/verifier"
-	"github.com/sydneyowl/clh-server/msgproto"
 	"github.com/sydneyowl/clh-server/pkg/config"
 	msg2 "github.com/sydneyowl/clh-server/pkg/msg"
 	"github.com/sydneyowl/clh-server/pkg/trans"
@@ -125,11 +125,11 @@ func (svr *Service) handleConn(conn net.Conn) {
 	_ = conn.SetReadDeadline(time.Time{})
 
 	switch m := rawMsg.(type) {
-	case *msgproto.HandshakeRequest:
+	case *clh_proto.HandshakeRequest:
 		slog.Debugf("received handshake request from client: %s %s", m.ClientType, m.Ver)
 		if err := svr.verifier.VerifyLogin(m); err != nil {
 			slog.Warnf("failed to verify login: %v", err)
-			_ = msg.WriteMsg(conn, &msgproto.HandshakeResponse{
+			_ = msg.WriteMsg(conn, &clh_proto.HandshakeResponse{
 				RunId:  m.RunId,
 				Accept: false,
 				Error:  err.Error(),
@@ -141,7 +141,7 @@ func (svr *Service) handleConn(conn net.Conn) {
 		clientType, err := ValidateClientType(m.ClientType)
 		if err != nil {
 			slog.Warnf("failed to validate client type: %v", err)
-			_ = msg.WriteMsg(conn, &msgproto.HandshakeResponse{
+			_ = msg.WriteMsg(conn, &clh_proto.HandshakeResponse{
 				RunId:  m.RunId,
 				Accept: false,
 				Error:  err.Error(),
@@ -152,7 +152,7 @@ func (svr *Service) handleConn(conn net.Conn) {
 
 		// accept connection
 		slog.Infof("client login: ip [%s] os [%s] type [%s]", conn.RemoteAddr().String(), m.Os, m.ClientType)
-		_ = msg.WriteMsg(conn, &msgproto.HandshakeResponse{
+		_ = msg.WriteMsg(conn, &clh_proto.HandshakeResponse{
 			RunId:  m.RunId,
 			Accept: true,
 			Error:  "",

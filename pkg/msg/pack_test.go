@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/sydneyowl/clh-server/msgproto"
+	"github.com/sydneyowl/clh-server/clh-proto"
 )
 
 var (
@@ -19,7 +19,7 @@ var (
 
 func init() {
 	msgCtl.RegisterMsg(TypeHandReq, func() Message {
-		return &msgproto.HandshakeRequest{}
+		return &clh_proto.HandshakeRequest{}
 	})
 }
 
@@ -28,7 +28,7 @@ func TestPack(t *testing.T) {
 
 	var msg Message
 	// correct
-	msg = &msgproto.HandshakeRequest{
+	msg = &clh_proto.HandshakeRequest{
 		Os:        "Windows",
 		Ver:       "0.2.1",
 		AuthKey:   "d4s1c5qa1dd",
@@ -49,7 +49,7 @@ func TestPack(t *testing.T) {
 func TestUnPack(t *testing.T) {
 	assert := assert.New(t)
 
-	msg := &msgproto.HandshakeRequest{
+	msg := &clh_proto.HandshakeRequest{
 		Os:        "Linux",
 		Ver:       "1.0.0",
 		AuthKey:   "testkey",
@@ -62,7 +62,7 @@ func TestUnPack(t *testing.T) {
 
 	unpacked, err := msgCtl.UnPack(TypeHandReq, bs[5:]) // Skip type byte and length
 	assert.NoError(err)
-	unpackedMsg := unpacked.(*msgproto.HandshakeRequest)
+	unpackedMsg := unpacked.(*clh_proto.HandshakeRequest)
 	assert.Equal(msg.Os, unpackedMsg.Os)
 	assert.Equal(msg.Ver, unpackedMsg.Ver)
 	assert.Equal(msg.AuthKey, unpackedMsg.AuthKey)
@@ -73,7 +73,7 @@ func TestUnPack(t *testing.T) {
 func TestUnPackInto(t *testing.T) {
 	assert := assert.New(t)
 
-	msg := &msgproto.HandshakeRequest{
+	msg := &clh_proto.HandshakeRequest{
 		Os:        "Linux",
 		Ver:       "1.0.0",
 		AuthKey:   "testkey",
@@ -84,7 +84,7 @@ func TestUnPackInto(t *testing.T) {
 	bs, err := msgCtl.Pack(msg)
 	assert.NoError(err)
 
-	target := &msgproto.HandshakeRequest{}
+	target := &clh_proto.HandshakeRequest{}
 	err = msgCtl.UnPackInto(bs[5:], target) // Skip type byte and length
 	assert.NoError(err)
 	assert.Equal(msg.Os, target.Os)
@@ -98,7 +98,7 @@ func TestPackUnregisteredMessage(t *testing.T) {
 	assert := assert.New(t)
 
 	// Assuming Status is not registered
-	msg := &msgproto.Status{
+	msg := &clh_proto.Status{
 		DialFrequencyHz: 14074000,
 		Mode:            "FT8",
 	}

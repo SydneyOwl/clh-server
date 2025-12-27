@@ -1,0 +1,3 @@
+[submodule "clh-proto"]
+	path = clh-proto
+	url = https://github.com/SydneyOwl/clh-proto.git

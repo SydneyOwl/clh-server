@@ -8,9 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gookit/slog"
 	"github.com/spf13/cobra"
+	"github.com/sydneyowl/clh-server/clh-proto"
 	"github.com/sydneyowl/clh-server/internal/client/pkg"
 	"github.com/sydneyowl/clh-server/internal/client/receiver"
-	"github.com/sydneyowl/clh-server/msgproto"
 	"github.com/sydneyowl/clh-server/pkg/msg"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -70,8 +70,8 @@ var runReceiver = &cobra.Command{
 		var program *tea.Program
 		program = tea.NewProgram(model) // fixme lock problem
 
-		receiver.Dispatcher.RegisterHandler(&msgproto.CommandResponse{}, receiver.OnCommandResponseReceived)
-		receiver.Dispatcher.RegisterHandler(&msgproto.WsjtxMessagePacked{}, func(message msg.Message) {
+		receiver.Dispatcher.RegisterHandler(&clh_proto.CommandResponse{}, receiver.OnCommandResponseReceived)
+		receiver.Dispatcher.RegisterHandler(&clh_proto.WsjtxMessagePacked{}, func(message msg.Message) {
 			data, err := protojson.Marshal(message)
 			if err != nil {
 				program.Send(pkg.ResponseMsg{Response: fmt.Sprintf("Error marshaling message: %v", err), Err: nil})

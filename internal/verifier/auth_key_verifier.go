@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/sydneyowl/clh-server/msgproto"
+	"github.com/sydneyowl/clh-server/clh-proto"
 	"github.com/sydneyowl/clh-server/pkg/crypto"
 )
 
@@ -14,7 +14,7 @@ type AuthKeyVerifier struct {
 	key string
 }
 
-func (akv *AuthKeyVerifier) VerifyLogin(m *msgproto.HandshakeRequest) error {
+func (akv *AuthKeyVerifier) VerifyLogin(m *clh_proto.HandshakeRequest) error {
 	if m.RunId == "" {
 		return errors.New("no run id provided")
 	}

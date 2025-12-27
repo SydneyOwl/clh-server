@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/sydneyowl/clh-server/msgproto"
+	"github.com/sydneyowl/clh-server/clh-proto"
 	"github.com/sydneyowl/clh-server/pkg/msg"
 )
 
@@ -14,7 +14,7 @@ func TestMemoryCache_PublishMessage(t *testing.T) {
 	cache := NewMemoryCache()
 	defer cache.RemoveCache("testRunId")
 
-	message := &msgproto.HandshakeRequest{
+	message := &clh_proto.HandshakeRequest{
 		Os:        "Linux",
 		Ver:       "1.0.0",
 		AuthKey:   "testkey",
@@ -42,7 +42,7 @@ func TestMemoryCache_SubscribeHandler(t *testing.T) {
 	token := cache.SubscribeHandler("testRunId", handler)
 	assert.NotNil(t, token)
 
-	message := &msgproto.HandshakeRequest{
+	message := &clh_proto.HandshakeRequest{
 		Os:        "Linux",
 		Ver:       "1.0.0",
 		AuthKey:   "testkey",
@@ -68,7 +68,7 @@ func TestMemoryCache_BufferedMessages(t *testing.T) {
 	cache := NewMemoryCache()
 	defer cache.RemoveCache("testRunId")
 
-	message1 := &msgproto.HandshakeRequest{
+	message1 := &clh_proto.HandshakeRequest{
 		Os:        "Linux",
 		Ver:       "1.0.0",
 		AuthKey:   "testkey1",
@@ -76,7 +76,7 @@ func TestMemoryCache_BufferedMessages(t *testing.T) {
 		RunId:     "testRunId",
 	}
 
-	message2 := &msgproto.HandshakeRequest{
+	message2 := &clh_proto.HandshakeRequest{
 		Os:        "Windows",
 		Ver:       "1.0.0",
 		AuthKey:   "testkey2",
@@ -117,7 +117,7 @@ func TestMemoryCache_BufferedMessages(t *testing.T) {
 func TestMemoryCache_RemoveCache(t *testing.T) {
 	cache := NewMemoryCache()
 
-	message := &msgproto.HandshakeRequest{
+	message := &clh_proto.HandshakeRequest{
 		Os:        "Linux",
 		Ver:       "1.0.0",
 		AuthKey:   "testkey",
@@ -157,7 +157,7 @@ func TestMemoryCache_StatusMessage(t *testing.T) {
 	cache := NewMemoryCache()
 	defer cache.RemoveCache("testRunId")
 
-	status := &msgproto.Status{
+	status := &clh_proto.Status{
 		DialFrequencyHz:      14074000,
 		Mode:                 "FT8",
 		DxCall:               "VK3",

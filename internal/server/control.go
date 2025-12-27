@@ -13,7 +13,7 @@ import (
 	"github.com/sydneyowl/clh-server/internal/cache"
 	"github.com/sydneyowl/clh-server/pkg/debounce"
 
-	"github.com/sydneyowl/clh-server/msgproto"
+	"github.com/sydneyowl/clh-server/clh-proto"
 	"github.com/sydneyowl/clh-server/pkg/config"
 
 	"github.com/gookit/slog"
@@ -134,16 +134,16 @@ func (ctrl *Control) Close() error {
 
 func (ctrl *Control) regReceiverMsgHandlers() {
 	slog.Tracef("Registering message handlers for receiver")
-	ctrl.msgDispatcher.RegisterHandler(&msgproto.Ping{}, ctrl.heartbeatHandler)
-	ctrl.msgDispatcher.RegisterHandler(&msgproto.Command{}, ctrl.commandHandler)
+	ctrl.msgDispatcher.RegisterHandler(&clh_proto.Ping{}, ctrl.heartbeatHandler)
+	ctrl.msgDispatcher.RegisterHandler(&clh_proto.Command{}, ctrl.commandHandler)
 	ctrl.msgDispatcher.RegisterDefaultHandler(ctrl.defaultHandler)
 }
 
 func (ctrl *Control) regSenderMsgHandlers() {
 	slog.Tracef("Registering message handlers for sender")
-	ctrl.msgDispatcher.RegisterHandler(&msgproto.Ping{}, ctrl.heartbeatHandler)
-	ctrl.msgDispatcher.RegisterHandler(&msgproto.WsjtxMessage{}, ctrl.wsjtxMsgHandler)
-	ctrl.msgDispatcher.RegisterHandler(&msgproto.RigData{}, ctrl.rigDataMsgHander)
+	ctrl.msgDispatcher.RegisterHandler(&clh_proto.Ping{}, ctrl.heartbeatHandler)
+	ctrl.msgDispatcher.RegisterHandler(&clh_proto.WsjtxMessage{}, ctrl.wsjtxMsgHandler)
+	ctrl.msgDispatcher.RegisterHandler(&clh_proto.RigData{}, ctrl.rigDataMsgHander)
 	ctrl.msgDispatcher.RegisterDefaultHandler(ctrl.defaultHandler)
 }
 
@@ -155,12 +155,12 @@ func (ctrl *Control) defaultHandler(msg msg1.Message) {
 
 func (ctrl *Control) heartbeatHandler(msg msg1.Message) {
 	slog.Tracef("Client %s sent a heartbeat message.", ctrl.runID)
-	ping, success := tryUnwrapMessage[*msgproto.Ping](msg, ctrl.msgDispatcher)
+	ping, success := tryUnwrapMessage[*clh_proto.Ping](msg, ctrl.msgDispatcher)
 	if !success {
 		return
 	}
 	if math.Abs(float64(ping.Timestamp-time.Now().Unix())) > 10 {
-		_ = ctrl.msgDispatcher.Send(&msgproto.Pong{
+		_ = ctrl.msgDispatcher.Send(&clh_proto.Pong{
 			Ack:   false,
 			Error: "Invalid timestamp. Check your clock!",
 		})
@@ -169,7 +169,7 @@ func (ctrl *Control) heartbeatHandler(msg msg1.Message) {
 
 	ctrl.lastPing.Store(time.Now())
 	slog.Tracef("%s heartbeat message accepted.", ctrl.runID)
-	_ = ctrl.msgDispatcher.Send(&msgproto.Pong{
+	_ = ctrl.msgDispatcher.Send(&clh_proto.Pong{
 		Ack:   true,
 		Error: "",
 	})
@@ -177,17 +177,17 @@ func (ctrl *Control) heartbeatHandler(msg msg1.Message) {
 
 func (ctrl *Control) wsjtxMsgHandler(msg msg1.Message) {
 	slog.Tracef("Client %s sent a wsjtx message.", ctrl.runID)
-	sub, success := tryUnwrapMessage[*msgproto.WsjtxMessage](msg, ctrl.msgDispatcher)
+	sub, success := tryUnwrapMessage[*clh_proto.WsjtxMessage](msg, ctrl.msgDispatcher)
 	if !success {
 		return
 	}
 	var prodErr error
 	switch v := sub.Payload.(type) {
-	case *msgproto.WsjtxMessage_Status:
+	case *clh_proto.WsjtxMessage_Status:
 		prodErr = ctrl.cache.PublishMessage(ctrl.runID, v.Status)
-	case *msgproto.WsjtxMessage_Decode:
+	case *clh_proto.WsjtxMessage_Decode:
 		prodErr = ctrl.cache.PublishMessage(ctrl.runID, v.Decode)
-	case *msgproto.WsjtxMessage_WsprDecode:
+	case *clh_proto.WsjtxMessage_WsprDecode:
 		prodErr = ctrl.cache.PublishMessage(ctrl.runID, v.WsprDecode)
 	default:
 		prodErr = fmt.Errorf("unknown message type %T", sub.Payload)
@@ -201,7 +201,7 @@ func (ctrl *Control) wsjtxMsgHandler(msg msg1.Message) {
 }
 
 func (ctrl *Control) rigDataMsgHander(msg msg1.Message) {
-	sub, success := tryUnwrapMessage[*msgproto.RigData](msg, ctrl.msgDispatcher)
+	sub, success := tryUnwrapMessage[*clh_proto.RigData](msg, ctrl.msgDispatcher)
 	if !success {
 		return
 	}
@@ -213,7 +213,7 @@ func (ctrl *Control) rigDataMsgHander(msg msg1.Message) {
 
 func (ctrl *Control) commandHandler(msg msg1.Message) {
 	slog.Tracef("Client %s sent a command message.", ctrl.runID)
-	command, success := tryUnwrapMessage[*msgproto.Command](msg, ctrl.msgDispatcher)
+	command, success := tryUnwrapMessage[*clh_proto.Command](msg, ctrl.msgDispatcher)
 	if !success {
 		return
 	}
@@ -299,7 +299,7 @@ func (ctrl *Control) doForward(message []msg1.Message) {
 			return
 		}
 
-		tbs := &msgproto.WsjtxMessagePacked{
+		tbs := &clh_proto.WsjtxMessagePacked{
 			Status:      nil,
 			Decodes:     nil,
 			WsprDecodes: nil,
@@ -307,16 +307,16 @@ func (ctrl *Control) doForward(message []msg1.Message) {
 		// pack msgs
 		for _, val := range *res {
 			switch vv := val.(type) {
-			case *msgproto.Status:
+			case *clh_proto.Status:
 				tbs.Status = vv
-			case *msgproto.Decode:
+			case *clh_proto.Decode:
 				if tbs.Decodes == nil {
-					tbs.Decodes = make([]*msgproto.Decode, 0, qlen)
+					tbs.Decodes = make([]*clh_proto.Decode, 0, qlen)
 				}
 				tbs.Decodes = append(tbs.Decodes, vv)
-			case *msgproto.WSPRDecode:
+			case *clh_proto.WSPRDecode:
 				if tbs.WsprDecodes == nil {
-					tbs.WsprDecodes = make([]*msgproto.WSPRDecode, 0, qlen)
+					tbs.WsprDecodes = make([]*clh_proto.WSPRDecode, 0, qlen)
 				}
 				tbs.WsprDecodes = append(tbs.WsprDecodes, vv)
 			}
@@ -333,7 +333,7 @@ func (ctrl *Control) doForward(message []msg1.Message) {
 }
 
 func (ctrl *Control) respondCommand(success bool, result string, commandId string) error {
-	return ctrl.msgDispatcher.Send(&msgproto.CommandResponse{
+	return ctrl.msgDispatcher.Send(&clh_proto.CommandResponse{
 		CommandId: commandId,
 		Success:   success,
 		Result:    result,
@@ -344,7 +344,7 @@ func tryUnwrapMessage[T any](msg msg1.Message, dispatcher *msg.Dispatcher) (T, b
 	var zero T
 	unwrapped, ok := msg.(T)
 	if !ok {
-		_ = dispatcher.Send(&msgproto.CommonResponse{
+		_ = dispatcher.Send(&clh_proto.CommonResponse{
 			Success: false,
 			Message: "Invalid message type",
 		})

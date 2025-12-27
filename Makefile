@@ -8,7 +8,7 @@ init:
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 proto:
-	rm -f msgproto/*.pb.go && protoc --go_out=. --go_opt=paths=source_relative msgproto/*
+	rm -f clh-proto/*.pb.go && protoc --go_out=. --go_opt=paths=source_relative clh-proto/*
 
 run:
 	@go run main.go

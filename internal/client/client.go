@@ -11,8 +11,8 @@ import (
 
 	"github.com/gookit/goutil/strutil"
 	"github.com/gookit/slog"
+	"github.com/sydneyowl/clh-server/clh-proto"
 	"github.com/sydneyowl/clh-server/internal/msg"
-	"github.com/sydneyowl/clh-server/msgproto"
 	"github.com/sydneyowl/clh-server/pkg/crypto"
 	msg1 "github.com/sydneyowl/clh-server/pkg/msg"
 )
@@ -53,7 +53,7 @@ func (c *Client) DoConn() error {
 func (c *Client) DoLogin() error {
 	tm := time.Now().Unix()
 	p, _ := strutil.RandomString(5)
-	err := msg.WriteMsg(c.Conn, &msgproto.HandshakeRequest{
+	err := msg.WriteMsg(c.Conn, &clh_proto.HandshakeRequest{
 		Os:         "Linux",
 		Ver:        "0.0",
 		ClientType: c.ClientType,
@@ -69,11 +69,11 @@ func (c *Client) DoLogin() error {
 	if err != nil {
 		return err
 	}
-	response := readMsg.(*msgproto.HandshakeResponse)
+	response := readMsg.(*clh_proto.HandshakeResponse)
 	slog.Infof("Connected to server successfully. Got acked runID %s", response.RunId)
 	_ = c.Conn.SetReadDeadline(time.Time{})
 	c.Dispatcher = msg.NewDispatcher(c.Conn)
-	c.Dispatcher.RegisterHandler(&msgproto.Pong{}, c.onHBReceived)
+	c.Dispatcher.RegisterHandler(&clh_proto.Pong{}, c.onHBReceived)
 	c.Dispatcher.RegisterDefaultHandler(c.onDefaultFallbackReceived)
 	c.LastAck.Store(time.Now().Unix())
 	return nil
@@ -81,7 +81,7 @@ func (c *Client) DoLogin() error {
 
 func (c *Client) doHeartbeat() {
 	for {
-		err := msg.WriteMsg(c.Conn, &msgproto.Ping{
+		err := msg.WriteMsg(c.Conn, &clh_proto.Ping{
 			Timestamp: time.Now().Unix(),
 		})
 		if err != nil {
@@ -94,7 +94,7 @@ func (c *Client) doHeartbeat() {
 }
 
 func (c *Client) onHBReceived(mm msg1.Message) {
-	a, ok := mm.(*msgproto.Pong)
+	a, ok := mm.(*clh_proto.Pong)
 	if !ok {
 		slog.Errorf("Cannot convert message to Pong: %v", mm)
 		return

@@ -1,7 +1,7 @@
 package verifier
 
-import "github.com/sydneyowl/clh-server/msgproto"
+import "github.com/sydneyowl/clh-server/clh-proto"
 
 type Verifier interface {
-	VerifyLogin(*msgproto.HandshakeRequest) error
+	VerifyLogin(*clh_proto.HandshakeRequest) error
 }
