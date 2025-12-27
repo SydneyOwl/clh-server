@@ -1,13 +1,12 @@
 package cmd
 
 import (
-	"log"
-
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gookit/slog"
+	"github.com/k0swe/wsjtx-go/v4"
 	"github.com/spf13/cobra"
-	"github.com/sydneyowl/clh-server/internal/client/pkg"
-	"github.com/sydneyowl/clh-server/internal/client/sender"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 var (
@@ -16,6 +15,9 @@ var (
 	sUseTLS         bool
 	skey            string
 	sSkipVerifyCert bool
+
+	wsjtxUdp  bool = true
+	randomMsg bool
 )
 
 // runSender represents the run-sender command
@@ -24,31 +26,44 @@ var runSender = &cobra.Command{
 	Short: "Run sender example.",
 	Long:  `Run sender example. This is for test usage only.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		sender := sender.NewSender(sServerIp, sServerPort, sUseTLS, skey, sSkipVerifyCert)
-		if err := sender.DoConn(); err != nil {
-			slog.Fatalf("Connection failed: %v", err)
-			return
-		}
-		if err := sender.DoLogin(); err != nil {
-			slog.Fatalf("Login failed: %v", err)
-			return
-		}
-		doneChan := make(chan struct{})
-		p := tea.NewProgram(pkg.InitialModel(sender.Run, func(command string) (string, error) {
-			return "", nil
-		}, func() {
-			select {
-			case doneChan <- struct{}{}:
-			default:
+		//sender := sender.NewSender(sServerIp, sServerPort, sUseTLS, skey, sSkipVerifyCert)
+		//if err := sender.DoConn(); err != nil {
+		//	slog.Fatalf("Connection failed: %v", err)
+		//	return
+		//}
+		//if err := sender.DoLogin(); err != nil {
+		//	slog.Fatalf("Login failed: %v", err)
+		//	return
+		//}
+
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+		if randomMsg {
+			//go sender.TestRandomInfoSending(sigChan)
+		} else {
+			wsjtxServer, err := wsjtx.MakeServer()
+			if err != nil {
+				slog.Fatalf("%v", err)
+				return
 			}
-			sender.Close()
-		}))
-
-		go sender.TestRandomInfoSending(doneChan)
-
-		if _, err := p.Run(); err != nil {
-			log.Fatal(err)
+			slog.Infof("Wsjtx server created successfully at 127.0.0.1:2237")
+			wsjtxChannel := make(chan interface{}, 5)
+			errChannel := make(chan error, 5)
+			go wsjtxServer.ListenToWsjtx(wsjtxChannel, errChannel)
+			go func(msgChan chan interface{}, errChan chan error) {
+				for {
+					select {
+					case msg := <-msgChan:
+						slog.Infof("Got msg: %v", msg)
+					case err := <-errChannel:
+						slog.Errorf("%v", err)
+					}
+				}
+			}(wsjtxChannel, errChannel)
 		}
+
+		<-sigChan
 	},
 }
 
@@ -58,5 +73,11 @@ func init() {
 	runSender.Flags().BoolVar(&sUseTLS, "tls", true, "use tls")
 	runSender.Flags().BoolVar(&sSkipVerifyCert, "skip-cert-verify", false, "skip certificate verification")
 	runSender.Flags().StringVar(&skey, "key", "???", "key for conn auth usage")
+
+	runSender.Flags().BoolVar(&wsjtxUdp, "wsjtx-udp", true, "upload messages received from wsjtx client.")
+	runSender.Flags().BoolVar(&randomMsg, "random-msg", false, "upload messages generated randomly.")
+
+	runSender.MarkFlagsOneRequired("wsjtx-udp", "random-msg")       // 至少需要一个
+	runSender.MarkFlagsMutuallyExclusive("wsjtx-udp", "random-msg") // 不能同时使用
 	rootCmd.AddCommand(runSender)
 }

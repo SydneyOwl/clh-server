@@ -16,5 +16,6 @@ func buildMsgMap() map[byte]func() msg.Message {
 	msgMap['b'] = func() msg.Message { return &clh_proto.HandshakeResponse{} }
 	msgMap['c'] = func() msg.Message { return &clh_proto.WsjtxMessage{} }
 	msgMap['d'] = func() msg.Message { return &clh_proto.WsjtxMessagePacked{} }
+	msgMap['e'] = func() msg.Message { return &clh_proto.RigData{} }
 	return msgMap
 }

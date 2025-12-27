@@ -2,6 +2,7 @@ package sender
 
 import (
 	"math/rand"
+	"os"
 	"strconv"
 	"time"
 
@@ -27,7 +28,7 @@ func NewSender(serverIp string, serverPort int, useTLS bool, key string, skipCer
 	}
 }
 
-func (s *Sender) TestRandomInfoSending(doneChan <-chan struct{}) {
+func (s *Sender) TestRandomInfoSending(doneChan <-chan os.Signal) {
 	tt := time.NewTicker(time.Second * 2)
 	defer tt.Stop()
 	for {
