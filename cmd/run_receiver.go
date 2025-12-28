@@ -1,15 +1,9 @@
 package cmd
 
 import (
-	"fmt"
-	"log"
-	"strings"
-
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gookit/slog"
 	"github.com/spf13/cobra"
-	"github.com/sydneyowl/clh-server/clh-proto"
-	"github.com/sydneyowl/clh-server/internal/client/pkg"
+	clh_proto "github.com/sydneyowl/clh-server/clh-proto"
 	"github.com/sydneyowl/clh-server/internal/client/receiver"
 	"github.com/sydneyowl/clh-server/pkg/msg"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -21,14 +15,21 @@ var (
 	rUseTLS         bool
 	rkey            string
 	rSkipVerifyCert bool
+
+	senderID string
 )
 
 // runReceiver represents the run-receiver command
+
 var runReceiver = &cobra.Command{
 	Use:   "run-receiver",
 	Short: "Run receiver example.",
 	Long:  `Run receiver example. This is for test usage only.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if senderID == "" {
+			slog.Fatalf("sender id is required")
+			return
+		}
 		receiver := receiver.NewReceiver(rServerIp, rServerPort, rUseTLS, rkey, rSkipVerifyCert)
 		if err := receiver.DoConn(); err != nil {
 			slog.Fatalf("Connection failed: %v", err)
@@ -39,49 +40,26 @@ var runReceiver = &cobra.Command{
 			return
 		}
 
-		model := pkg.InitialModel(receiver.Run, func(command string) (string, error) {
-			sp := strings.Split(command, " ")
-			if len(sp) == 0 {
-				return "", nil
-			}
-			if len(sp) == 1 {
-				res, err := receiver.SendCommandAndWait(sp[0], nil, 1)
-				if err != nil {
-					return "", err
-				}
-				if res != nil {
-					return *res, nil
-				}
-				return "", nil
-			}
-			if len(sp) >= 2 {
-				res, err := receiver.SendCommandAndWait(sp[0], sp[1:], 1)
-				if err != nil {
-					return "", err
-				}
-				if res != nil {
-					return *res, nil
-				}
-				return "", nil
-			}
-			return "", nil
-		}, receiver.Close)
-
-		var program *tea.Program
-		program = tea.NewProgram(model) // fixme lock problem
-
 		receiver.Dispatcher.RegisterHandler(&clh_proto.CommandResponse{}, receiver.OnCommandResponseReceived)
 		receiver.Dispatcher.RegisterHandler(&clh_proto.WsjtxMessagePacked{}, func(message msg.Message) {
 			data, err := protojson.Marshal(message)
 			if err != nil {
-				program.Send(pkg.ResponseMsg{Response: fmt.Sprintf("Error marshaling message: %v", err), Err: nil})
+				slog.Errorf("encode message failed: %v", err)
 			} else {
-				program.Send(pkg.ResponseMsg{Response: string(data), Err: nil})
+				slog.Infof("Received message: %s", string(data))
 			}
 		})
-		if _, err := program.Run(); err != nil {
-			log.Fatal(err)
+		go receiver.Run()
+
+		command := make([]string, 0)
+		command = append(command, senderID)
+
+		_, err := receiver.SendCommandAndWait("subscribe", command, 5)
+		if err != nil {
+			slog.Errorf("send command failed: %v", err)
 		}
+
+		<-receiver.Dispatcher.Done()
 	},
 }
 
@@ -91,5 +69,6 @@ func init() {
 	runReceiver.Flags().BoolVar(&rUseTLS, "tls", true, "use tls")
 	runReceiver.Flags().BoolVar(&rSkipVerifyCert, "skip-cert-verify", false, "skip certificate verification")
 	runReceiver.Flags().StringVar(&rkey, "key", "???", "key for conn auth usage")
+	runReceiver.Flags().StringVar(&senderID, "senderId", "???", "Sender ID to subscribe")
 	rootCmd.AddCommand(runReceiver)
 }
