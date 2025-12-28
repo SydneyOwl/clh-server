@@ -4,9 +4,7 @@ import (
 	"github.com/gookit/slog"
 	"github.com/k0swe/wsjtx-go/v4"
 	"github.com/spf13/cobra"
-	"os"
-	"os/signal"
-	"syscall"
+	"github.com/sydneyowl/clh-server/internal/client/sender"
 )
 
 var (
@@ -26,21 +24,19 @@ var runSender = &cobra.Command{
 	Short: "Run sender example.",
 	Long:  `Run sender example. This is for test usage only.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		//sender := sender.NewSender(sServerIp, sServerPort, sUseTLS, skey, sSkipVerifyCert)
-		//if err := sender.DoConn(); err != nil {
-		//	slog.Fatalf("Connection failed: %v", err)
-		//	return
-		//}
-		//if err := sender.DoLogin(); err != nil {
-		//	slog.Fatalf("Login failed: %v", err)
-		//	return
-		//}
-
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		sender := sender.NewSender(sServerIp, sServerPort, sUseTLS, skey, sSkipVerifyCert)
+		if err := sender.DoConn(); err != nil {
+			slog.Fatalf("Connection failed: %v", err)
+			return
+		}
+		if err := sender.DoLogin(); err != nil {
+			slog.Fatalf("Login failed: %v", err)
+			return
+		}
 
 		if randomMsg {
-			//go sender.TestRandomInfoSending(sigChan)
+			go sender.TestRandomInfoSending(make(<-chan struct{}))
+			go sender.Run()
 		} else {
 			wsjtxServer, err := wsjtx.MakeServer()
 			if err != nil {
@@ -51,19 +47,23 @@ var runSender = &cobra.Command{
 			wsjtxChannel := make(chan interface{}, 5)
 			errChannel := make(chan error, 5)
 			go wsjtxServer.ListenToWsjtx(wsjtxChannel, errChannel)
+			go sender.Run()
 			go func(msgChan chan interface{}, errChan chan error) {
 				for {
 					select {
 					case msg := <-msgChan:
 						slog.Infof("Got msg: %v", msg)
+						err = sender.SendWsjtxUdpMessage(msg)
+						if err != nil {
+							slog.Errorf("%v", err)
+						}
 					case err := <-errChannel:
 						slog.Errorf("%v", err)
 					}
 				}
 			}(wsjtxChannel, errChannel)
 		}
-
-		<-sigChan
+		<-sender.Dispatcher.Done()
 	},
 }
 
@@ -77,7 +77,7 @@ func init() {
 	runSender.Flags().BoolVar(&wsjtxUdp, "wsjtx-udp", true, "upload messages received from wsjtx client.")
 	runSender.Flags().BoolVar(&randomMsg, "random-msg", false, "upload messages generated randomly.")
 
-	runSender.MarkFlagsOneRequired("wsjtx-udp", "random-msg")       // 至少需要一个
-	runSender.MarkFlagsMutuallyExclusive("wsjtx-udp", "random-msg") // 不能同时使用
+	runSender.MarkFlagsOneRequired("wsjtx-udp", "random-msg")
+	runSender.MarkFlagsMutuallyExclusive("wsjtx-udp", "random-msg")
 	rootCmd.AddCommand(runSender)
 }

@@ -130,7 +130,7 @@ func (c *Client) Run() {
 
 	c.Dispatcher.Run()
 	<-c.Dispatcher.Done()
-	slog.Infof("Receiver shutting down")
+	slog.Infof("Shutting down")
 }
 
 func (c *Client) Close() {
