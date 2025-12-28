@@ -86,7 +86,7 @@ func (c *Client) doHeartbeat() {
 		})
 		if err != nil {
 			slog.Error("HB" + err.Error())
-			return
+			//return
 		}
 
 		time.Sleep(time.Second * 2)

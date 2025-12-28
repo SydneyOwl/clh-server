@@ -3,7 +3,7 @@ module github.com/sydneyowl/clh-server
 go 1.20
 
 require (
-	github.com/1pkg/gohalt v0.9.0
+	github.com/bep/debounce v1.2.2-0.20251122105843-15ac3266668f
 	github.com/gookit/goutil v0.7.3
 	github.com/gookit/slog v0.6.0
 	github.com/k0swe/wsjtx-go/v4 v4.1.3
@@ -16,33 +16,22 @@ require (
 )
 
 require (
-	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/go-ole/go-ole v1.2.4 // indirect
-	github.com/golang/snappy v0.0.2 // indirect
 	github.com/gookit/color v1.6.0 // indirect
 	github.com/gookit/gsr v0.1.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/json-iterator/go v1.1.10 // indirect
-	github.com/klauspost/compress v1.11.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/leemcloughlin/jdn v0.0.0-20201102080031-6f88db6a6bf2 // indirect
 	github.com/mazznoer/csscolorparser v0.1.5 // indirect
-	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.1 // indirect
-	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
+	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.7.1 // indirect
-	github.com/prometheus/common v0.14.0 // indirect
-	github.com/satori/go.uuid v1.2.0 // indirect
-	github.com/segmentio/kafka-go v0.4.2 // indirect
-	github.com/shirou/gopsutil v2.20.8+incompatible // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
-	github.com/streadway/amqp v1.0.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/term v0.29.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

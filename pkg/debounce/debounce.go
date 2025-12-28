@@ -1,36 +1,29 @@
 package debounce
 
 import (
-	"context"
-	"sync"
+	"github.com/bep/debounce"
 	"time"
-
-	"github.com/1pkg/gohalt"
 )
 
 type Debouncer struct {
-	runner gohalt.Runner
-	mu     sync.Mutex
-	last   interface{}
+	handler    func(func())
+	cancelFunc func()
 }
 
 func NewDebouncer(delay time.Duration) *Debouncer {
-	throttler := gohalt.NewThrottlerTimed(20, delay, 0)
+	hl, cancel := debounce.NewWithCancel(delay)
 	return &Debouncer{
-		runner: gohalt.NewRunnerAsync(context.Background(), throttler),
+		handler:    hl,
+		cancelFunc: cancel,
 	}
 }
 
-func (d *Debouncer) Call(fn func(interface{}), arg interface{}) {
-	d.mu.Lock()
-	d.last = arg
-	d.mu.Unlock()
-
-	d.runner.Run(func(ctx context.Context) error {
-		d.mu.Lock()
-		arg := d.last
-		d.mu.Unlock()
-		fn(arg)
-		return nil
+func (d *Debouncer) Call(fn func(any2 any), args any) {
+	d.handler(func() {
+		fn(args)
 	})
+}
+
+func (d *Debouncer) CancelAll() {
+	d.cancelFunc()
 }

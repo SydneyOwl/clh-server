@@ -26,7 +26,7 @@ var runReceiver = &cobra.Command{
 	Short: "Run receiver example.",
 	Long:  `Run receiver example. This is for test usage only.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if senderID == "" {
+		if senderID == "???" {
 			slog.Fatalf("sender id is required")
 			return
 		}
@@ -69,6 +69,6 @@ func init() {
 	runReceiver.Flags().BoolVar(&rUseTLS, "tls", true, "use tls")
 	runReceiver.Flags().BoolVar(&rSkipVerifyCert, "skip-cert-verify", false, "skip certificate verification")
 	runReceiver.Flags().StringVar(&rkey, "key", "???", "key for conn auth usage")
-	runReceiver.Flags().StringVar(&senderID, "senderId", "???", "Sender ID to subscribe")
+	runReceiver.Flags().StringVar(&senderID, "sender-id", "???", "Sender ID to subscribe")
 	rootCmd.AddCommand(runReceiver)
 }

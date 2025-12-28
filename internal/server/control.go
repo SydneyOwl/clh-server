@@ -284,52 +284,7 @@ func (ctrl *Control) doForward(message []msg1.Message) {
 	ctrl.msgSendQueue = append(ctrl.msgSendQueue, message...)
 	ctrl.msgQueueLocker.Unlock()
 
-	ctrl.msgDebouncer.Call(func(i any) {
-		ctrl.msgQueueLocker.Lock()
-		defer ctrl.msgQueueLocker.Unlock()
-		slog.Tracef("Forwarding message to %s.", ctrl.runID)
-		res, ok := i.(*[]msg1.Message)
-		if !ok {
-			slog.Warnf("Unexpected array detected while debouncing!")
-			return
-		}
-
-		qlen := len(*res)
-		if qlen == 0 {
-			return
-		}
-
-		tbs := &clh_proto.WsjtxMessagePacked{
-			Status:      nil,
-			Decodes:     nil,
-			WsprDecodes: nil,
-		}
-		// pack msgs
-		for _, val := range *res {
-			switch vv := val.(type) {
-			case *clh_proto.Status:
-				tbs.Status = vv
-			case *clh_proto.Decode:
-				if tbs.Decodes == nil {
-					tbs.Decodes = make([]*clh_proto.Decode, 0, qlen)
-				}
-				tbs.Decodes = append(tbs.Decodes, vv)
-			case *clh_proto.WSPRDecode:
-				if tbs.WsprDecodes == nil {
-					tbs.WsprDecodes = make([]*clh_proto.WSPRDecode, 0, qlen)
-				}
-				tbs.WsprDecodes = append(tbs.WsprDecodes, vv)
-			}
-		}
-		// remove queue
-		*res = (*res)[:0]
-
-		if err := ctrl.msgDispatcher.Send(tbs); err != nil {
-			slog.Warnf("Failed to forward message to %s: %s", ctrl.runID, err)
-		}
-
-		slog.Tracef("%v", tbs)
-	}, &ctrl.msgSendQueue)
+	ctrl.msgDebouncer.Call(ctrl.forwarder, &ctrl.msgSendQueue)
 }
 
 func (ctrl *Control) respondCommand(success bool, result string, commandId string) error {
@@ -338,6 +293,53 @@ func (ctrl *Control) respondCommand(success bool, result string, commandId strin
 		Success:   success,
 		Result:    result,
 	})
+}
+
+func (ctrl *Control) forwarder(i any) {
+	ctrl.msgQueueLocker.Lock()
+	defer ctrl.msgQueueLocker.Unlock()
+	slog.Tracef("Forwarding message to %s.", ctrl.runID)
+	res, ok := i.(*[]msg1.Message)
+	if !ok {
+		slog.Warnf("Unexpected array detected while debouncing!")
+		return
+	}
+
+	qlen := len(*res)
+	if qlen == 0 {
+		return
+	}
+
+	tbs := &clh_proto.WsjtxMessagePacked{
+		Status:      nil,
+		Decodes:     nil,
+		WsprDecodes: nil,
+	}
+	// pack msgs
+	for _, val := range *res {
+		switch vv := val.(type) {
+		case *clh_proto.Status:
+			tbs.Status = vv
+		case *clh_proto.Decode:
+			if tbs.Decodes == nil {
+				tbs.Decodes = make([]*clh_proto.Decode, 0, qlen)
+			}
+			tbs.Decodes = append(tbs.Decodes, vv)
+		case *clh_proto.WSPRDecode:
+			if tbs.WsprDecodes == nil {
+				tbs.WsprDecodes = make([]*clh_proto.WSPRDecode, 0, qlen)
+			}
+			tbs.WsprDecodes = append(tbs.WsprDecodes, vv)
+		}
+	}
+	// remove queue
+	*res = (*res)[:0]
+
+	if err := ctrl.msgDispatcher.Send(tbs); err != nil {
+		slog.Warnf("Failed to forward message to %s: %s", ctrl.runID, err)
+	}
+
+	slog.Tracef("%v", tbs)
 }
 
 func tryUnwrapMessage[T any](msg msg1.Message, dispatcher *msg.Dispatcher) (T, bool) {
