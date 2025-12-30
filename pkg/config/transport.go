@@ -6,6 +6,6 @@ type Transport struct {
 
 func getDefaultTransportConfig() *Transport {
 	return &Transport{
-		HeartbeatTimeoutSec: 10,
+		HeartbeatTimeoutSec: 16,
 	}
 }

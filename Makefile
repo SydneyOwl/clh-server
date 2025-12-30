@@ -8,10 +8,10 @@ init:
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 proto:
-	rm -f clh-proto/*.pb.go && protoc --go_out=. --go_opt=paths=source_relative clh-proto/*
+	rm -f clh-proto/*.pb.go && protoc --go_out=. --go_opt=paths=source_relative clh-proto/*.proto
 
 run:
 	@go run main.go
 
 build:
-	mkdir -p bin/ && go build -ldflags "-X version.Version=$(VERSION) -X version.Commit=$(COMMIT)" -o ./bin/ ./...
+	mkdir -p bin/ && go build -ldflags "-X github.com/sydneyowl/clh-server/pkg/version.Version=$(VERSION) -X github.com/sydneyowl/clh-server/pkg/version.Commit=$(COMMIT)" -o ./bin/ ./...

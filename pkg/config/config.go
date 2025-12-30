@@ -10,17 +10,17 @@ import (
 )
 
 type Config struct {
-	Server  *Server  `yaml:"server"`
-	Message *Message `yaml:"message"`
-	Log     *Log     `yaml:"log"`
+	Server *Server `yaml:"server"`
+	//Message *Message `yaml:"message"`
+	Log *Log `yaml:"log"`
 }
 
 // GenerateDefaultConfig Generates default config for our application.
 func GenerateDefaultConfig() *Config {
 	return &Config{
-		Server:  getDefaultServerConfig(),
-		Message: getDefaultMessageConfig(),
-		Log:     getDefaultLogConfig(),
+		Server: getDefaultServerConfig(),
+		//Message: getDefaultMessageConfig(),
+		Log: getDefaultLogConfig(),
 	}
 }
 
