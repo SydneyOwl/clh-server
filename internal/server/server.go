@@ -126,7 +126,7 @@ func (svr *Service) handleConn(conn net.Conn) {
 
 	switch m := rawMsg.(type) {
 	case *clh_proto.HandshakeRequest:
-		slog.Debugf("received handshake request from client: %s %s", m.ClientType, m.Ver)
+		slog.Debugf("received handshake request from client: [type %s] [version %s] [runid %v]", m.ClientType, m.Ver, m.RunId)
 		if err := svr.verifier.VerifyLogin(m); err != nil {
 			slog.Warnf("failed to verify login: %v", err)
 			_ = msg.WriteMsg(conn, &clh_proto.HandshakeResponse{
@@ -145,6 +145,18 @@ func (svr *Service) handleConn(conn net.Conn) {
 				RunId:  m.RunId,
 				Accept: false,
 				Error:  err.Error(),
+			})
+			_ = conn.Close()
+			return
+		}
+
+		// for connect testers, we ack it and close connection
+		if clientType == connTest {
+			slog.Infof("client test connection: ip [%s] os [%s] type [%s]", conn.RemoteAddr().String(), m.Os, m.ClientType)
+			_ = msg.WriteMsg(conn, &clh_proto.HandshakeResponse{
+				RunId:  m.RunId,
+				Accept: true,
+				Error:  "",
 			})
 			_ = conn.Close()
 			return

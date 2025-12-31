@@ -29,6 +29,7 @@ const (
 
 	receiver ClientType = "receiver"
 	sender   ClientType = "sender"
+	connTest ClientType = "connTest"
 
 	subscribe     CommandType = "subscribe"
 	unsubscribe   CommandType = "unsubscribe"
@@ -38,7 +39,7 @@ const (
 func ValidateClientType(input string) (ClientType, error) {
 	ct := ClientType(input)
 	switch ct {
-	case receiver, sender:
+	case receiver, sender, connTest:
 		return ct, nil
 	default:
 		return "", fmt.Errorf("invalid ClientType: %s", input)
@@ -201,6 +202,7 @@ func (ctrl *Control) wsjtxMsgHandler(msg msg1.Message) {
 }
 
 func (ctrl *Control) rigDataMsgHander(msg msg1.Message) {
+	slog.Tracef("Client %s sent a rig data message.", ctrl.runID)
 	sub, success := tryUnwrapMessage[*clh_proto.RigData](msg, ctrl.msgDispatcher)
 	if !success {
 		return
