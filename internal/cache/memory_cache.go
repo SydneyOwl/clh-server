@@ -79,12 +79,10 @@ func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
 
 	if _, ok := message.(*clh_proto.Status); ok {
 		c.unsendCache.Set(topicDigiStatus, message, StatusExpireDuration)
-		return nil
 	}
 
 	if _, ok := message.(*clh_proto.RigData); ok {
 		c.unsendCache.Set(topicRigStatus, message, StatusExpireDuration)
-		return nil
 	}
 
 	if len(c.msgEmitter.Listeners(topic)) != 0 {
@@ -127,7 +125,7 @@ func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
 func (c *MemoryCache) subscribeHandler(runId string, handler func(event *emitter.Event)) <-chan emitter.Event {
 	topic := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicPostfix)
 	statusDigi := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicDigiStatusPostfix)
-	statusRigdata := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicDigiStatusPostfix)
+	statusRigdata := fmt.Sprintf("%s%s%s", runId, TopicRunIdDivider, EmitTopicRigStatusPostfix)
 	ch := c.msgEmitter.On(topic, handler)
 	c.mu.Lock()
 	defer c.mu.Unlock()

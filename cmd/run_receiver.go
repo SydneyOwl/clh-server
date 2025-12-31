@@ -41,7 +41,7 @@ var runReceiver = &cobra.Command{
 		}
 
 		receiver.Dispatcher.RegisterHandler(&clh_proto.CommandResponse{}, receiver.OnCommandResponseReceived)
-		receiver.Dispatcher.RegisterHandler(&clh_proto.WsjtxMessagePacked{}, func(message msg.Message) {
+		receiver.Dispatcher.RegisterHandler(&clh_proto.PackedMessage{}, func(message msg.Message) {
 			data, err := protojson.Marshal(message)
 			if err != nil {
 				slog.Errorf("encode message failed: %v", err)

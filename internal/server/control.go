@@ -312,16 +312,19 @@ func (ctrl *Control) forwarder(i any) {
 		return
 	}
 
-	tbs := &clh_proto.WsjtxMessagePacked{
-		Status:      nil,
+	tbs := &clh_proto.PackedMessage{
+		DigiStatus:  nil,
+		RigData:     nil,
 		Decodes:     nil,
 		WsprDecodes: nil,
 	}
 	// pack msgs
 	for _, val := range *res {
 		switch vv := val.(type) {
+		case *clh_proto.RigData:
+			tbs.RigData = vv
 		case *clh_proto.Status:
-			tbs.Status = vv
+			tbs.DigiStatus = vv
 		case *clh_proto.Decode:
 			if tbs.Decodes == nil {
 				tbs.Decodes = make([]*clh_proto.Decode, 0, qlen)
