@@ -120,9 +120,7 @@ archives:
 release:
   name_template: "v{{ .Version }}"
   header: |
-    ## Announcement
-
-    Read the official announcement: [Announcing GoReleaser v{{.Major}}.{{.Minor}}](https://goreleaser.com/blog/goreleaser-v{{.Major}}.{{.Minor}}/).
+    New version of `clh-server` released!
 
   footer: |
     **Full Changelog**: https://github.com/sydneyowl/clh-server/compare/{{ .PreviousTag }}...{{ if .IsNightly }}nightly{{ else }}{{ .Tag }}{{ end }}
