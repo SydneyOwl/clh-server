@@ -4,4 +4,4 @@ clh-server.exe
 logs
 bin
 *.pb.*
-*.yaml
+config.yaml
