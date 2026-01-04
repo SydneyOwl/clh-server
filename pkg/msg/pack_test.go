@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/sydneyowl/clh-server/clh-proto"
+	clh_proto "github.com/sydneyowl/clh-server/clh-proto"
 )
 
 var (
@@ -44,6 +44,33 @@ func TestPack(t *testing.T) {
 	pack, err := msgCtl.UnPack(tp, bu)
 	assert.NoError(err)
 	fmt.Println(pack)
+}
+
+func TestReadMsgAndWriteMsg(t *testing.T) {
+	assert := assert.New(t)
+
+	msg := &clh_proto.HandshakeRequest{
+		Os:        "Linux",
+		Ver:       "0.1.0",
+		AuthKey:   "testkey",
+		Timestamp: 123456789,
+		RunId:     "testrun",
+	}
+
+	var buf bytes.Buffer
+	err := msgCtl.WriteMsg(&buf, msg)
+	assert.NoError(err)
+
+	readMsg, err := msgCtl.ReadMsg(&buf)
+	assert.NoError(err)
+	assert.IsType(&clh_proto.HandshakeRequest{}, readMsg)
+
+	handshake := readMsg.(*clh_proto.HandshakeRequest)
+	assert.Equal("Linux", handshake.Os)
+	assert.Equal("0.1.0", handshake.Ver)
+	assert.Equal("testkey", handshake.AuthKey)
+	assert.Equal(int64(123456789), handshake.Timestamp)
+	assert.Equal("testrun", handshake.RunId)
 }
 
 func TestUnPack(t *testing.T) {

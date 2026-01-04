@@ -10,6 +10,13 @@ init:
 proto:
 	rm -f clh-proto/*.pb.go && protoc --go_out=. --go_opt=paths=source_relative clh-proto/*.proto
 
+test:
+	go test ./...
+	go vet ./...
+
+coverage:
+	go test ./cmd/... ./internal/... ./pkg/... -coverprofile=coverage.out && go tool cover -func=coverage.out
+
 run:
 	@go run main.go
 

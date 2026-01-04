@@ -8,7 +8,7 @@ import (
 	"github.com/gookit/slog"
 	"github.com/olebedev/emitter"
 	"github.com/patrickmn/go-cache"
-	"github.com/sydneyowl/clh-server/clh-proto"
+	clh_proto "github.com/sydneyowl/clh-server/clh-proto"
 	"github.com/sydneyowl/clh-server/pkg/msg"
 )
 
@@ -92,6 +92,14 @@ func (c *MemoryCache) publishMessage(runId string, message msg.Message) error {
 	}
 
 	// there's no handler that subscribes this topic - we just cache it for future usage.
+	if _, ok := message.(*clh_proto.Status); ok {
+		// already cached in separate caches above
+		return nil
+	}
+	if _, ok := message.(*clh_proto.RigData); ok {
+		// already cached in separate caches above
+		return nil
+	}
 	slog.Tracef("Listener for %s does not exists! Caching message.", topic)
 	cc, found := c.unsendCache.Get(topic)
 	if !found {
